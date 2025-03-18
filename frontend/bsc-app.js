@@ -1,126 +1,197 @@
-console.log('Loading BSC Staking App...');
-
-// Contract addresses and ABIs
-const CONTRACTS = {
-    pepeToken: {
-        address: '0xf8FAbd399e2E3B57761929d04d5eEdA13bcA43a5',
-        abi: [
-            "function balanceOf(address) view returns (uint256)",
-            "function approve(address spender, uint256 amount) returns (bool)",
-            "function transfer(address to, uint256 amount) returns (bool)",
-            "function decimals() view returns (uint8)"
-        ]
-    },
-    pepeStaking: {
-        address: '0x34b520567306EdF17CA642A2A8EB392fC7C7853C',
-        abi: [
-            "function stake(uint256 amount)",
-            "function unstake()",
-            "function claimReward()",
-            "function calculateReward(address) view returns (uint256)",
-            "function stakes(address) view returns (uint256 amount, uint256 startTime, uint256 lastClaimTime)",
-            "function totalStaked() view returns (uint256)",
-            "function rewardToken() view returns (address)",
-            "function rewardRate() view returns (uint256)"
-        ]
-    }
-};
-
-// BSC Testnet Configuration
-const BSC_CONFIG = {
-    chainId: '0x61',
-    chainName: 'BSC Testnet',
-    nativeCurrency: {
-        name: 'tBNB',
-        symbol: 'tBNB',
-        decimals: 18
-    },
-    rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
-    blockExplorerUrls: ['https://testnet.bscscan.com']
-};
-
-let provider, signer, pepeToken, stakingContract, rewardToken;
+let provider, signer, pepeToken, stakingContract;
 let userAddress = null;
-
-// UI Elements
-const connectWalletBtn = document.getElementById('connectWallet');
-const stakeAmountInput = document.getElementById('stakeAmount');
-const stakeButton = document.getElementById('stakeButton');
-const unstakeButton = document.getElementById('unstakeButton');
-const claimButton = document.getElementById('claimButton');
-const pepeBalanceEl = document.getElementById('pepeBalance');
-const stakedBalanceEl = document.getElementById('stakedBalance');
-const usdtBalanceEl = document.getElementById('usdtBalance');
-const rewardAmountEl = document.getElementById('rewardAmount');
-const notification = document.getElementById('notification');
-const notificationText = document.getElementById('notificationText');
-const metamaskModal = document.getElementById('metamaskModal');
-const networkModal = document.getElementById('networkModal');
-
-console.log('UI Elements initialized');
+let poolsInfo = [];
+let userStakes = [];
+let selectedPoolId = 0;
 
 // Helper Functions
 function showNotification(message, isError = false) {
-    console.log('Showing notification:', message, isError);
-    notification.className = `fixed bottom-4 right-4 ${isError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-3 rounded-lg shadow-lg`;
+    const notification = document.getElementById('notification');
+    const notificationText = document.getElementById('notificationText');
+    notification.className = `fixed bottom-4 right-4 max-w-md ${isError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-3 rounded-lg shadow-lg`;
     notificationText.textContent = message;
     notification.classList.remove('hidden');
-    setTimeout(() => {
-        notification.classList.add('hidden');
-    }, 3000);
+    setTimeout(() => notification.classList.add('hidden'), 3000);
 }
 
 function formatAmount(amount, decimals = 18) {
+    if (typeof amount === 'string') {
+        return amount;
+    }
     return ethers.utils.formatUnits(amount, decimals);
 }
 
-// Switch to BSC Testnet
-async function switchToBSCTestnet() {
-    console.log('Switching to BSC Testnet...');
+// Pool Card Template
+function createPoolCard(pool, index) {
+    const poolConfig = CONFIG.pools[index];
+    const totalStaked = pool.totalStaked ? formatAmount(pool.totalStaked) : "0";
+    const userStake = userStakes[index]?.amount ? formatAmount(userStakes[index].amount) : "0";
+    
+    return `
+        <div class="pool-card bg-white rounded-xl shadow-lg p-6 border-2 ${pool.isActive ? 'border-green-200' : 'border-gray-200'}">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h3 class="text-lg font-bold">${poolConfig.name}</h3>
+                    <p class="text-gray-600 text-sm">Lock 30 hari</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-2xl font-bold text-green-600">${poolConfig.reward} USDT</p>
+                    <p class="text-gray-600 text-sm">Reward per holder</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3 mb-4">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Min/Max Stake:</span>
+                    <span class="font-medium">${poolConfig.minPepe} PEPE</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Total Staked:</span>
+                    <span class="font-medium">${Number(totalStaked).toLocaleString()} PEPE</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Holders:</span>
+                    <span class="font-medium">${pool.currentHolders || 0}/${poolConfig.maxHolders}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Your Stake:</span>
+                    <span class="font-medium">${Number(userStake).toLocaleString()} PEPE</span>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                ${(!pool.currentHolders || pool.currentHolders < poolConfig.maxHolders) ? `
+                    <button onclick="openStakeModal(${index})" 
+                            class="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors">
+                        Stake PEPE
+                    </button>
+                ` : `
+                    <button disabled 
+                            class="w-full bg-gray-400 text-white py-2 rounded-lg font-semibold cursor-not-allowed">
+                        Pool Penuh
+                    </button>
+                `}
+                ${userStakes[index]?.amount > 0 ? `
+                    <button onclick="unstakeFromPool(${index})" 
+                            class="w-full bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors">
+                        Unstake
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Modal Functions
+function openStakeModal(poolId) {
+    selectedPoolId = poolId;
+    const poolConfig = CONFIG.pools[poolId];
+    
+    document.getElementById('stakeModal').classList.remove('hidden');
+    document.getElementById('minStake').textContent = `${poolConfig.minPepe} PEPE`;
+    document.getElementById('poolReward').textContent = `${poolConfig.reward} USDT`;
+}
+
+function closeStakeModal() {
+    document.getElementById('stakeModal').classList.add('hidden');
+}
+
+function closeMetaMaskModal() {
+    document.getElementById('metamaskModal').classList.add('hidden');
+}
+
+// Pool Actions
+async function confirmStake() {
     try {
-        await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: BSC_CONFIG.chainId }],
-        });
-        networkModal.classList.add('hidden');
-    } catch (switchError) {
-        console.error('Error switching network:', switchError);
-        if (switchError.code === 4902) {
-            try {
-                await window.ethereum.request({
-                    method: 'wallet_addEthereumChain',
-                    params: [BSC_CONFIG],
-                });
-                networkModal.classList.add('hidden');
-            } catch (addError) {
-                console.error('Error adding network:', addError);
-                showNotification('Failed to add BSC Testnet network', true);
+        const pool = poolsInfo[selectedPoolId];
+        
+        // Approve dulu
+        const approveTx = await pepeToken.approve(CONFIG.pepeStaking.address, pool.minStakeAmount);
+        await approveTx.wait();
+        
+        // Lakukan stake
+        const stakeTx = await stakingContract.stake(selectedPoolId);
+        await stakeTx.wait();
+        
+        showNotification('Berhasil stake PEPE tokens!');
+        closeStakeModal();
+        updateUI();
+    } catch (error) {
+        console.error('Error staking:', error);
+        showNotification(error.message, true);
+    }
+}
+
+async function unstakeFromPool(poolId) {
+    try {
+        const tx = await stakingContract.unstake(poolId);
+        await tx.wait();
+        showNotification('Berhasil unstake PEPE tokens!');
+        updateUI();
+    } catch (error) {
+        console.error('Error unstaking:', error);
+        showNotification(error.message, true);
+    }
+}
+
+// Update UI
+async function updateUI() {
+    try {
+        // Update pools display
+        document.getElementById('poolsContainer').innerHTML = 
+            CONFIG.pools.map((poolConfig, index) => {
+                const pool = poolsInfo[index] || {
+                    minStakeAmount: "0",
+                    totalStaked: "0",
+                    currentHolders: 0,
+                    isActive: true
+                };
+                return createPoolCard(pool, index);
+            }).join('');
+
+        if (stakingContract) {
+            // Get pools info if connected
+            poolsInfo = await stakingContract.getAllPoolsInfo();
+            if (userAddress) {
+                userStakes = await stakingContract.getUserStakes(userAddress);
+                
+                // Update balances
+                const pepeBalance = await pepeToken.balanceOf(userAddress);
+                document.getElementById('pepeBalance').textContent = 
+                    `${Number(formatAmount(pepeBalance)).toLocaleString()} PEPE`;
+
+                // Calculate total staked
+                let totalStaked = ethers.BigNumber.from(0);
+                for (let i = 0; i < poolsInfo.length; i++) {
+                    if (userStakes[i]?.amount) {
+                        totalStaked = totalStaked.add(userStakes[i].amount);
+                    }
+                }
+                document.getElementById('totalStaked').textContent = 
+                    `${Number(formatAmount(totalStaked)).toLocaleString()} PEPE`;
             }
-        } else {
-            showNotification('Failed to switch network', true);
+
+            // Update pools display with contract data
+            document.getElementById('poolsContainer').innerHTML = 
+                poolsInfo.map((pool, index) => createPoolCard(pool, index)).join('');
         }
+    } catch (error) {
+        console.error('Error updating UI:', error);
+        showNotification('Error updating display', true);
     }
 }
 
 // Connect Wallet
 async function connectWallet() {
-    console.log('Connecting wallet...');
     try {
         if (typeof window.ethereum === 'undefined') {
-            console.log('MetaMask not found, showing modal');
-            metamaskModal.classList.remove('hidden');
-            metamaskModal.querySelector('.bg-white').classList.add('scale-100', 'opacity-100');
-            metamaskModal.querySelector('.bg-white').classList.remove('scale-95', 'opacity-0');
+            document.getElementById('metamaskModal').classList.remove('hidden');
             return;
         }
 
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        console.log('Current chainId:', chainId);
         if (chainId !== BSC_CONFIG.chainId) {
-            console.log('Wrong network, showing modal');
-            networkModal.classList.remove('hidden');
-            networkModal.querySelector('.bg-white').classList.add('scale-100', 'opacity-100');
-            networkModal.querySelector('.bg-white').classList.remove('scale-95', 'opacity-0');
+            document.getElementById('networkModal').classList.remove('hidden');
             return;
         }
 
@@ -128,167 +199,80 @@ async function connectWallet() {
         await provider.send("eth_requestAccounts", []);
         signer = provider.getSigner();
         userAddress = await signer.getAddress();
-        console.log('Connected wallet address:', userAddress);
 
         // Initialize contracts
         pepeToken = new ethers.Contract(
-            CONTRACTS.pepeToken.address,
-            CONTRACTS.pepeToken.abi,
+            CONFIG.pepeToken.address,
+            CONFIG.pepeToken.abi,
             signer
         );
 
         stakingContract = new ethers.Contract(
-            CONTRACTS.pepeStaking.address,
-            CONTRACTS.pepeStaking.abi,
-            signer
-        );
-
-        // Get reward token address
-        const rewardTokenAddress = await stakingContract.rewardToken();
-        console.log('Reward token address:', rewardTokenAddress);
-        rewardToken = new ethers.Contract(
-            rewardTokenAddress,
-            CONTRACTS.pepeToken.abi,
+            CONFIG.pepeStaking.address,
+            CONFIG.pepeStaking.abi,
             signer
         );
 
         // Update UI
+        const connectWalletBtn = document.getElementById('connectWallet');
         connectWalletBtn.innerHTML = `<i class="fas fa-wallet mr-2"></i>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-        connectWalletBtn.classList.remove('bg-white', 'text-yellow-600', 'hover:bg-yellow-50');
-        connectWalletBtn.classList.add('bg-yellow-100', 'text-yellow-800', 'cursor-default');
+        connectWalletBtn.classList.remove('bg-white', 'text-green-600');
+        connectWalletBtn.classList.add('bg-green-100', 'text-green-800', 'cursor-default');
 
-        // Enable buttons
-        stakeButton.disabled = false;
-        unstakeButton.disabled = false;
-        claimButton.disabled = false;
+        await updateUI();
+        setInterval(updateUI, 10000);
 
-        // Update balances
-        await updateBalances();
-        setInterval(updateRewards, 10000);
-
-        showNotification('Wallet connected successfully!');
+        showNotification('Wallet berhasil terhubung!');
     } catch (error) {
         console.error('Connection error:', error);
-        showNotification(error.message || 'Failed to connect wallet', true);
+        showNotification(error.message, true);
     }
 }
 
-// Update Balances
-async function updateBalances() {
-    console.log('Updating balances...');
+// Network Functions
+async function switchToBSCTestnet() {
     try {
-        if (!userAddress || !pepeToken || !stakingContract || !rewardToken) return;
-
-        const [pepeBalance, stake, rewardTokenBalance, decimals] = await Promise.all([
-            pepeToken.balanceOf(userAddress),
-            stakingContract.stakes(userAddress),
-            rewardToken.balanceOf(userAddress),
-            pepeToken.decimals()
-        ]);
-
-        console.log('Balances:', {
-            pepe: formatAmount(pepeBalance, decimals),
-            staked: formatAmount(stake.amount, decimals),
-            usdt: formatAmount(rewardTokenBalance, 18)
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: BSC_CONFIG.chainId }],
         });
-
-        pepeBalanceEl.textContent = `${Number(formatAmount(pepeBalance, decimals)).toLocaleString()} PEPE`;
-        stakedBalanceEl.textContent = `${Number(formatAmount(stake.amount, decimals)).toLocaleString()} PEPE`;
-        usdtBalanceEl.textContent = `${Number(formatAmount(rewardTokenBalance, 18)).toLocaleString()} USDT`;
-
-    } catch (error) {
-        console.error('Error updating balances:', error);
-        showNotification('Error updating balances', true);
-    }
-}
-
-// Update Rewards
-async function updateRewards() {
-    console.log('Updating rewards...');
-    try {
-        if (!userAddress || !stakingContract) return;
-
-        const reward = await stakingContract.calculateReward(userAddress);
-        console.log('Current reward:', formatAmount(reward));
-        rewardAmountEl.textContent = `${Number(formatAmount(reward)).toLocaleString()} USDT`;
-
-    } catch (error) {
-        console.error('Error updating rewards:', error);
-    }
-}
-
-// Stake Tokens
-async function stakeTokens() {
-    console.log('Staking tokens...');
-    try {
-        const amount = ethers.utils.parseEther(stakeAmountInput.value);
-        console.log('Stake amount:', formatAmount(amount));
-        
-        console.log('Approving tokens...');
-        const approveTx = await pepeToken.approve(CONTRACTS.pepeStaking.address, amount);
-        await approveTx.wait();
-        
-        console.log('Staking tokens...');
-        const stakeTx = await stakingContract.stake(amount);
-        await stakeTx.wait();
-        
-        showNotification('Tokens staked successfully!');
-        stakeAmountInput.value = '';
-        updateBalances();
-    } catch (error) {
-        console.error('Error staking tokens:', error);
-        showNotification(error.message, true);
-    }
-}
-
-// Unstake Tokens
-async function unstakeTokens() {
-    console.log('Unstaking tokens...');
-    try {
-        const tx = await stakingContract.unstake();
-        await tx.wait();
-        
-        showNotification('Tokens unstaked successfully!');
-        updateBalances();
-    } catch (error) {
-        console.error('Error unstaking tokens:', error);
-        showNotification(error.message, true);
-    }
-}
-
-// Claim Rewards
-async function claimRewards() {
-    console.log('Claiming rewards...');
-    try {
-        const tx = await stakingContract.claimReward();
-        await tx.wait();
-        
-        showNotification('Rewards claimed successfully!');
-        updateBalances();
-    } catch (error) {
-        console.error('Error claiming rewards:', error);
-        showNotification(error.message, true);
+        document.getElementById('networkModal').classList.add('hidden');
+    } catch (switchError) {
+        if (switchError.code === 4902) {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [BSC_CONFIG],
+                });
+                document.getElementById('networkModal').classList.add('hidden');
+            } catch (addError) {
+                showNotification('Gagal menambahkan BSC Testnet', true);
+            }
+        } else {
+            showNotification('Gagal mengganti network', true);
+        }
     }
 }
 
 // Event Listeners
 window.addEventListener('load', () => {
-    console.log('Page loaded, setting up event listeners');
-    connectWalletBtn.addEventListener('click', connectWallet);
-    stakeButton.addEventListener('click', stakeTokens);
-    unstakeButton.addEventListener('click', unstakeTokens);
-    claimButton.addEventListener('click', claimRewards);
-
-    // Add event listener for Get MetaMask button
-    document.querySelector('#metamaskModal a').addEventListener('click', () => {
-        console.log('Opening MetaMask website');
-    });
-
-    // Add event listener for network switch button
-    document.querySelector('#networkModal button').addEventListener('click', switchToBSCTestnet);
-
+    // Display initial pool cards
+    updateUI();
+    
+    // Setup event listeners
+    document.getElementById('connectWallet').addEventListener('click', connectWallet);
     if (window.ethereum && window.ethereum.selectedAddress) {
-        console.log('Wallet already connected, reconnecting...');
         connectWallet();
     }
 });
+
+// Handle account changes
+if (window.ethereum) {
+    window.ethereum.on('accountsChanged', () => {
+        window.location.reload();
+    });
+
+    window.ethereum.on('chainChanged', () => {
+        window.location.reload();
+    });
+}

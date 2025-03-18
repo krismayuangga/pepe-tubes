@@ -17,9 +17,10 @@ describe("PEPE Staking", function () {
     PEPEToken = await ethers.getContractFactory("PEPEToken");
     pepeToken = await PEPEToken.deploy();
 
-    // Deploy Dummy USDT
+    // Deploy Dummy USDT and mint to owner
     DummyUSDT = await ethers.getContractFactory("DummyUSDT");
     dummyUSDT = await DummyUSDT.deploy();
+    await dummyUSDT.mint(owner.address, INITIAL_USDT_SUPPLY);
 
     // Deploy Staking Contract
     PEPEStaking = await ethers.getContractFactory("PEPEStaking");
@@ -73,8 +74,9 @@ describe("PEPE Staking", function () {
 
       const reward = await pepeStaking.calculateReward(user1.address);
       // Expected reward: amount * time * rewardRate / 1e18
-      // 1000 * 86400 * 1e16 / 1e18 = 864 USDT
-      expect(reward).to.be.closeTo(ethers.parseEther("864"), ethers.parseEther("1"));
+      // 1000 * 86400 * 1e16 / 1e18 = 0.864 USDT per PEPE token
+      // For 1000 PEPE tokens = 864000 USDT
+      expect(reward).to.be.closeTo(ethers.parseEther("864000"), ethers.parseEther("1"));
     });
 
     it("Should allow claiming rewards", async function () {
@@ -106,9 +108,14 @@ describe("PEPE Staking", function () {
   });
 
   describe("Admin functions", function () {
+    beforeEach(async function () {
+      // Mint additional USDT for admin functions testing
+      await dummyUSDT.mint(owner.address, ethers.parseEther("10000"));
+    });
+
     it("Should allow owner to add USDT", async function () {
       const amount = ethers.parseEther("1000");
-      await dummyUSDT.approve(pepeStaking.getAddress(), amount);
+      await dummyUSDT.approve(await pepeStaking.getAddress(), amount);
       await pepeStaking.addUSDT(amount);
       expect(await dummyUSDT.balanceOf(pepeStaking.getAddress())).to.equal(INITIAL_USDT_SUPPLY + amount);
     });

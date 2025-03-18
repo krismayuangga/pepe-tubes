@@ -1,132 +1,159 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract BSCPEPEStaking is ReentrancyGuard, Ownable {
-    // Token addresses
-    IERC20 public immutable pepeToken;
-    IERC20 public rewardToken; // USDT for rewards
+contract BSCPEPEStaking is Ownable, ReentrancyGuard {
+    struct Pool {
+        uint256 minStakeAmount;
+        uint256 maxHolders;
+        uint256 rewardPerHolder;
+        uint256 totalStaked;
+        uint256 currentHolders;
+        bool isActive;
+    }
 
-    // Staking settings
-    uint256 public rewardRate = 1; // 0.1% per day (in basis points)
-    uint256 public constant REWARD_PRECISION = 10000;
-    uint256 public constant MIN_STAKE_DURATION = 1 days;
-
-    // Staker info
     struct Stake {
         uint256 amount;
         uint256 startTime;
-        uint256 lastClaimTime;
+        uint256 poolId;
+        bool hasClaimedReward;
     }
 
-    mapping(address => Stake) public stakes;
-    uint256 public totalStaked;
+    IERC20 public pepeToken;
+    IERC20 public rewardToken;
+    mapping(address => bool) public isAdmin;
+    mapping(address => Stake[]) public userStakes;
+    Pool[] public pools;
 
-    // Events
-    event Staked(address indexed user, uint256 amount);
-    event Unstaked(address indexed user, uint256 amount);
-    event RewardClaimed(address indexed user, uint256 reward);
-    event RewardRateUpdated(uint256 newRate);
-    event RewardTokenUpdated(address newToken);
+    uint256 public constant LOCK_PERIOD = 30 days;
+
+    event Staked(address indexed user, uint256 indexed poolId, uint256 amount);
+    event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 reward);
+    event AdminSet(address indexed admin, bool status);
+    event RewardTokenSet(address indexed token);
+
+    modifier onlyAdmin() {
+        require(isAdmin[msg.sender] || owner() == msg.sender, "Not admin");
+        _;
+    }
 
     constructor(address _pepeToken) Ownable(msg.sender) {
         pepeToken = IERC20(_pepeToken);
-    }
-
-    // Set reward token (USDT)
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        require(_rewardToken != address(0), "Invalid token address");
-        rewardToken = IERC20(_rewardToken);
-        emit RewardTokenUpdated(_rewardToken);
-    }
-
-    // Update reward rate
-    function setRewardRate(uint256 _rewardRate) external onlyOwner {
-        require(_rewardRate <= 10000, "Rate too high"); // Max 100%
-        rewardRate = _rewardRate;
-        emit RewardRateUpdated(_rewardRate);
-    }
-
-    // Calculate rewards
-    function calculateReward(address _staker) public view returns (uint256) {
-        Stake memory stake = stakes[_staker];
-        if (stake.amount == 0) return 0;
-
-        uint256 duration = block.timestamp - stake.lastClaimTime;
-        uint256 reward = (stake.amount * rewardRate * duration) / (REWARD_PRECISION * 1 days);
-        return reward;
-    }
-
-    // Stake PEPE tokens
-    function stake(uint256 _amount) external nonReentrant {
-        require(_amount > 0, "Cannot stake 0");
         
-        // Claim any existing rewards before updating stake
-        _claimReward();
+        // Initialize pools
+        pools.push(Pool(1_000_000 ether, 1000, 7_500 ether, 0, 0, true));     // Pool 1: 1M PEPE → 7.5k USDT
+        pools.push(Pool(2_000_000 ether, 500, 20_000 ether, 0, 0, true));      // Pool 2: 2M PEPE → 20k USDT
+        pools.push(Pool(5_000_000 ether, 200, 62_500 ether, 0, 0, true));      // Pool 3: 5M PEPE → 62.5k USDT
+        pools.push(Pool(10_000_000 ether, 100, 150_000 ether, 0, 0, true));    // Pool 4: 10M PEPE → 150k USDT
+        pools.push(Pool(20_000_000 ether, 50, 400_000 ether, 0, 0, true));     // Pool 5: 20M PEPE → 400k USDT
+        pools.push(Pool(50_000_000 ether, 20, 1_250_000 ether, 0, 0, true));   // Pool 6: 50M PEPE → 1.25M USDT
+    }
 
-        // Transfer PEPE tokens to this contract
-        require(pepeToken.transferFrom(msg.sender, address(this), _amount), "Transfer failed");
+    function setAdmin(address admin, bool status) external onlyOwner {
+        isAdmin[admin] = status;
+        emit AdminSet(admin, status);
+    }
 
-        // Update staking info
-        if (stakes[msg.sender].amount == 0) {
-            stakes[msg.sender] = Stake({
-                amount: _amount,
-                startTime: block.timestamp,
-                lastClaimTime: block.timestamp
-            });
-        } else {
-            stakes[msg.sender].amount += _amount;
-            stakes[msg.sender].lastClaimTime = block.timestamp;
+    function setRewardToken(address _rewardToken) external onlyOwner {
+        rewardToken = IERC20(_rewardToken);
+        emit RewardTokenSet(_rewardToken);
+    }
+
+    function stake(uint256 poolId) external nonReentrant {
+        require(poolId < pools.length, "Invalid pool");
+        Pool storage pool = pools[poolId];
+        require(pool.isActive, "Pool not active");
+        require(pool.currentHolders < pool.maxHolders, "Pool is full");
+        
+        Stake[] storage stakes = userStakes[msg.sender];
+        for(uint i = 0; i < stakes.length; i++) {
+            require(stakes[i].poolId != poolId || stakes[i].amount == 0, "Already staked in this pool");
         }
 
-        totalStaked += _amount;
-        emit Staked(msg.sender, _amount);
+        require(pepeToken.transferFrom(msg.sender, address(this), pool.minStakeAmount), "Transfer failed");
+
+        stakes.push(Stake({
+            amount: pool.minStakeAmount,
+            startTime: block.timestamp,
+            poolId: poolId,
+            hasClaimedReward: false
+        }));
+
+        pool.totalStaked += pool.minStakeAmount;
+        pool.currentHolders++;
+
+        emit Staked(msg.sender, poolId, pool.minStakeAmount);
     }
 
-    // Unstake PEPE tokens
-    function unstake() external nonReentrant {
-        Stake storage userStake = stakes[msg.sender];
-        require(userStake.amount > 0, "No tokens staked");
-        require(block.timestamp >= userStake.startTime + MIN_STAKE_DURATION, "Minimum stake duration not met");
-
-        // Claim rewards first
-        _claimReward();
-
-        // Get stake amount
+    function unstake(uint256 poolId) external nonReentrant {
+        require(poolId < pools.length, "Invalid pool");
+        Pool storage pool = pools[poolId];
+        
+        Stake[] storage stakes = userStakes[msg.sender];
+        uint256 stakeIndex;
+        bool found = false;
+        
+        for(uint i = 0; i < stakes.length; i++) {
+            if(stakes[i].poolId == poolId && stakes[i].amount > 0) {
+                stakeIndex = i;
+                found = true;
+                break;
+            }
+        }
+        
+        require(found, "No stake found");
+        
+        Stake storage userStake = stakes[stakeIndex];
         uint256 amount = userStake.amount;
+        uint256 reward = 0;
+        
+        // Check if lock period is over
+        if(block.timestamp >= userStake.startTime + LOCK_PERIOD && !userStake.hasClaimedReward) {
+            reward = pool.rewardPerHolder;
+            userStake.hasClaimedReward = true;
+            require(rewardToken.transfer(msg.sender, reward), "Reward transfer failed");
+        }
 
-        // Reset stake
-        totalStaked -= amount;
-        delete stakes[msg.sender];
-
-        // Return staked tokens
         require(pepeToken.transfer(msg.sender, amount), "Transfer failed");
-        emit Unstaked(msg.sender, amount);
+        
+        pool.totalStaked -= amount;
+        pool.currentHolders--;
+        userStake.amount = 0;
+        
+        emit Unstaked(msg.sender, poolId, amount, reward);
     }
 
-    // Claim rewards
-    function claimReward() external nonReentrant {
-        _claimReward();
+    function getUserStakes(address user) external view returns (Stake[] memory) {
+        return userStakes[user];
     }
 
-    // Internal claim function
-    function _claimReward() internal {
-        uint256 reward = calculateReward(msg.sender);
-        if (reward == 0) return;
-
-        stakes[msg.sender].lastClaimTime = block.timestamp;
-
-        require(rewardToken.transfer(msg.sender, reward), "Reward transfer failed");
-        emit RewardClaimed(msg.sender, reward);
+    function getPoolDetails(uint256 poolId) external view onlyAdmin returns (
+        uint256 minStake,
+        uint256 maxHolders,
+        uint256 currentHolders,
+        uint256 totalStaked,
+        uint256 rewardPerHolder
+    ) {
+        require(poolId < pools.length, "Invalid pool");
+        Pool storage pool = pools[poolId];
+        return (
+            pool.minStakeAmount,
+            pool.maxHolders,
+            pool.currentHolders,
+            pool.totalStaked,
+            pool.rewardPerHolder
+        );
     }
 
-    // Emergency withdraw for owner
-    function emergencyWithdraw(IERC20 _token) external onlyOwner {
-        require(address(_token) != address(pepeToken), "Cannot withdraw stake token");
-        uint256 balance = _token.balanceOf(address(this));
-        require(_token.transfer(owner(), balance), "Transfer failed");
+    function getAllPoolsInfo() external view returns (Pool[] memory) {
+        return pools;
+    }
+
+    // Emergency function to recover tokens
+    function recoverTokens(address token, uint256 amount) external onlyOwner {
+        require(IERC20(token).transfer(owner(), amount), "Transfer failed");
     }
 }
