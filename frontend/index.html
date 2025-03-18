@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEPE Staking DApp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <nav class="bg-green-600 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center">
+                <h1 class="text-white text-2xl font-bold">PEPE Staking</h1>
+                <span class="ml-4 px-3 py-1 bg-green-500 text-white text-sm rounded-full">Localhost Network</span>
+            </div>
+            <button id="connectWallet" class="bg-white text-green-600 px-4 py-2 rounded-lg font-semibold hover:bg-green-50 transition-colors">
+                <i class="fas fa-wallet mr-2"></i>Connect Wallet
+            </button>
+        </div>
+    </nav>
+
+    <!-- MetaMask Instructions Modal -->
+    <div id="metamaskModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-2xl max-w-md w-full shadow-xl transform transition-all duration-200 scale-95 opacity-0">
+            <div class="text-center mb-6">
+                <i class="fas fa-wallet text-4xl text-green-600 mb-4"></i>
+                <h3 class="text-2xl font-bold text-gray-900">MetaMask Required</h3>
+            </div>
+            <p class="text-gray-600 mb-6 text-center">To use this dApp, you need to:</p>
+            <ol class="list-decimal list-inside space-y-3 mb-8 text-gray-700">
+                <li class="flex items-center">
+                    <span class="text-green-600 mr-2">1.</span>
+                    Install MetaMask browser extension
+                </li>
+                <li class="flex items-center">
+                    <span class="text-green-600 mr-2">2.</span>
+                    Create or import a wallet
+                </li>
+                <li class="flex items-center">
+                    <span class="text-green-600 mr-2">3.</span>
+                    Connect to Localhost network (Chain ID: 31337)
+                </li>
+            </ol>
+            <div class="flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-4 mt-6">
+                <a href="https://metamask.io" target="_blank" rel="noopener noreferrer"
+                   class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 hover:scale-105 transform transition-all duration-200 flex items-center justify-center font-semibold text-lg shadow-lg hover:shadow-xl">
+                    <i class="fas fa-arrow-up-right-from-square mr-2"></i>Get MetaMask
+                </a>
+                <button onclick="document.getElementById('metamaskModal').classList.add('hidden')" 
+                        class="px-8 py-3 border-2 border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 font-medium">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid md:grid-cols-2 gap-8">
+            <!-- Staking Card -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Stake PEPE Tokens</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Amount to Stake</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="stakeAmount" class="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Enter amount">
+                            <button id="stakeButton" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                                <i class="fas fa-lock mr-2"></i>Stake
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="unstakeButton" class="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                            <i class="fas fa-unlock mr-2"></i>Unstake All
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rewards Card -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Your Rewards</h2>
+                <div class="space-y-4">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Available Rewards</p>
+                        <p id="rewardAmount" class="text-2xl font-bold text-green-600">0 USDT</p>
+                    </div>
+                    <button id="claimButton" class="w-full bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                        <i class="fas fa-coins mr-2"></i>Claim Rewards
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balances Section -->
+        <div class="mt-8 bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">Your Balances</h2>
+            <div class="grid md:grid-cols-3 gap-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <p class="text-sm text-gray-600">PEPE Balance</p>
+                    <p id="pepeBalance" class="text-xl font-bold text-green-600">0 PEPE</p>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <p class="text-sm text-gray-600">Staked PEPE</p>
+                    <p id="stakedBalance" class="text-xl font-bold text-blue-600">0 PEPE</p>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <p class="text-sm text-gray-600">USDT Balance</p>
+                    <p id="usdtBalance" class="text-xl font-bold text-purple-600">0 USDT</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification -->
+    <div id="notification" class="fixed bottom-4 right-4 hidden bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg">
+        <p id="notificationText"></p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
