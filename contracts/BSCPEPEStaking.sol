@@ -1,11 +1,30 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
+
+/*
+/$$$$$$$  /$$$$$$$$ /$$$$$$$  /$$$$$$$$       /$$$$$$$$ /$$   /$$ /$$$$$$$  /$$$$$$$$  /$$$$$$ 
+| $$__  $$| $$_____/| $$__  $$| $$_____/      |__  $$__/| $$  | $$| $$__  $$| $$_____/ /$$__  $$
+| $$  \ $$| $$      | $$  \ $$| $$               | $$   | $$  | $$| $$  \ $$| $$      | $$  \__/
+| $$$$$$$/| $$$$$   | $$$$$$$/| $$$$$            | $$   | $$  | $$| $$$$$$$ | $$$$$   |  $$$$$$ 
+| $$____/ | $$__/   | $$____/ | $$__/            | $$   | $$  | $$| $$__  $$| $$__/    \____  $$
+| $$      | $$      | $$      | $$               | $$   | $$  | $$| $$  \ $$| $$       /$$  \ $$
+| $$      | $$$$$$$$| $$      | $$$$$$$$         | $$   |  $$$$$$/| $$$$$$$/| $$$$$$$$|  $$$$$$/
+|__/      |________/|__/      |________/         |__/    \______/ |_______/ |________/ \______/ 
+*/
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract BSCPEPEStaking is Ownable, ReentrancyGuard {
+    IERC20 public pepeToken;
+    IERC20 public rewardToken;
+    mapping(address => bool) public isAdmin;
+    mapping(address => Stake[]) public userStakes;
+    Pool[] public pools;
+
+    uint256 public constant LOCK_PERIOD = 30 days;
+
     struct Pool {
         uint256 minStakeAmount;
         uint256 maxHolders;
@@ -22,14 +41,6 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         bool hasClaimedReward;
     }
 
-    IERC20 public pepeToken;
-    IERC20 public rewardToken;
-    mapping(address => bool) public isAdmin;
-    mapping(address => Stake[]) public userStakes;
-    Pool[] public pools;
-
-    uint256 public constant LOCK_PERIOD = 30 days;
-
     event Staked(address indexed user, uint256 indexed poolId, uint256 amount);
     event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 reward);
     event AdminSet(address indexed admin, bool status);
@@ -44,12 +55,12 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         pepeToken = IERC20(_pepeToken);
         
         // Initialize pools
-        pools.push(Pool(1_000_000 ether, 1000, 7_500 ether, 0, 0, true));     // Pool 1: 1M PEPE → 7.5k USDT
-        pools.push(Pool(2_000_000 ether, 500, 20_000 ether, 0, 0, true));      // Pool 2: 2M PEPE → 20k USDT
-        pools.push(Pool(5_000_000 ether, 200, 62_500 ether, 0, 0, true));      // Pool 3: 5M PEPE → 62.5k USDT
-        pools.push(Pool(10_000_000 ether, 100, 150_000 ether, 0, 0, true));    // Pool 4: 10M PEPE → 150k USDT
-        pools.push(Pool(20_000_000 ether, 50, 400_000 ether, 0, 0, true));     // Pool 5: 20M PEPE → 400k USDT
-        pools.push(Pool(50_000_000 ether, 20, 1_250_000 ether, 0, 0, true));   // Pool 6: 50M PEPE → 1.25M USDT
+        pools.push(Pool(1_000_000 ether, 1000, 7.5 ether, 0, 0, true));     // Pool 1: 1M PEPE → 7.5 USDT
+        pools.push(Pool(2_000_000 ether, 800, 15 ether, 0, 0, true));       // Pool 2: 2M PEPE → 15 USDT
+        pools.push(Pool(5_000_000 ether, 400, 45 ether, 0, 0, true));       // Pool 3: 5M PEPE → 45 USDT
+        pools.push(Pool(10_000_000 ether, 200, 150 ether, 0, 0, true));     // Pool 4: 10M PEPE → 150 USDT
+        pools.push(Pool(20_000_000 ether, 208, 360 ether, 0, 0, true));     // Pool 5: 20M PEPE → 360 USDT
+        pools.push(Pool(100_000_000 ether, 60, 3000 ether, 0, 0, true));    // Pool 6: 100M PEPE → 3000 USDT
     }
 
     function setAdmin(address admin, bool status) external onlyOwner {
@@ -57,103 +68,68 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit AdminSet(admin, status);
     }
 
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        rewardToken = IERC20(_rewardToken);
-        emit RewardTokenSet(_rewardToken);
+    function setRewardToken(address token) external onlyOwner {
+        rewardToken = IERC20(token);
+        emit RewardTokenSet(token);
     }
 
-    function stake(uint256 poolId) external nonReentrant {
+    function stake(uint256 poolId, uint256 amount) external nonReentrant {
         require(poolId < pools.length, "Invalid pool");
         Pool storage pool = pools[poolId];
-        require(pool.isActive, "Pool not active");
+        require(pool.isActive, "Pool is not active");
+        require(amount >= pool.minStakeAmount, "Amount is less than minimum stake amount");
         require(pool.currentHolders < pool.maxHolders, "Pool is full");
-        
-        Stake[] storage stakes = userStakes[msg.sender];
-        for(uint i = 0; i < stakes.length; i++) {
-            require(stakes[i].poolId != poolId || stakes[i].amount == 0, "Already staked in this pool");
-        }
 
-        require(pepeToken.transferFrom(msg.sender, address(this), pool.minStakeAmount), "Transfer failed");
+        pepeToken.transferFrom(msg.sender, address(this), amount);
 
-        stakes.push(Stake({
-            amount: pool.minStakeAmount,
+        userStakes[msg.sender].push(Stake({
+            amount: amount,
             startTime: block.timestamp,
             poolId: poolId,
             hasClaimedReward: false
         }));
 
-        pool.totalStaked += pool.minStakeAmount;
-        pool.currentHolders++;
+        pool.totalStaked += amount;
+        pool.currentHolders += 1;
 
-        emit Staked(msg.sender, poolId, pool.minStakeAmount);
+        emit Staked(msg.sender, poolId, amount);
     }
 
-    function unstake(uint256 poolId) external nonReentrant {
-        require(poolId < pools.length, "Invalid pool");
-        Pool storage pool = pools[poolId];
-        
-        Stake[] storage stakes = userStakes[msg.sender];
-        uint256 stakeIndex;
-        bool found = false;
-        
-        for(uint i = 0; i < stakes.length; i++) {
-            if(stakes[i].poolId == poolId && stakes[i].amount > 0) {
-                stakeIndex = i;
-                found = true;
-                break;
-            }
-        }
-        
-        require(found, "No stake found");
-        
-        Stake storage userStake = stakes[stakeIndex];
+    function unstake(uint256 stakeIndex) external nonReentrant {
+        require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
+        Stake storage userStake = userStakes[msg.sender][stakeIndex];
+        Pool storage pool = pools[userStake.poolId];
+        require(block.timestamp >= userStake.startTime + LOCK_PERIOD, "Stake is still locked");
+
         uint256 amount = userStake.amount;
-        uint256 reward = 0;
-        
-        // Check if lock period is over
-        if(block.timestamp >= userStake.startTime + LOCK_PERIOD && !userStake.hasClaimedReward) {
-            reward = pool.rewardPerHolder;
+        uint256 reward = pool.rewardPerHolder;
+
+        pepeToken.transfer(msg.sender, amount);
+        if (!userStake.hasClaimedReward) {
+            rewardToken.transfer(msg.sender, reward);
             userStake.hasClaimedReward = true;
-            require(rewardToken.transfer(msg.sender, reward), "Reward transfer failed");
         }
 
-        require(pepeToken.transfer(msg.sender, amount), "Transfer failed");
-        
         pool.totalStaked -= amount;
-        pool.currentHolders--;
-        userStake.amount = 0;
-        
-        emit Unstaked(msg.sender, poolId, amount, reward);
+        pool.currentHolders -= 1;
+
+        emit Unstaked(msg.sender, userStake.poolId, amount, reward);
     }
 
     function getUserStakes(address user) external view returns (Stake[] memory) {
         return userStakes[user];
     }
 
-    function getPoolDetails(uint256 poolId) external view onlyAdmin returns (
-        uint256 minStake,
-        uint256 maxHolders,
-        uint256 currentHolders,
-        uint256 totalStaked,
-        uint256 rewardPerHolder
-    ) {
+    function getPoolDetails(uint256 poolId) external view onlyAdmin returns (Pool memory) {
         require(poolId < pools.length, "Invalid pool");
-        Pool storage pool = pools[poolId];
-        return (
-            pool.minStakeAmount,
-            pool.maxHolders,
-            pool.currentHolders,
-            pool.totalStaked,
-            pool.rewardPerHolder
-        );
+        return pools[poolId];
     }
 
     function getAllPoolsInfo() external view returns (Pool[] memory) {
         return pools;
     }
 
-    // Emergency function to recover tokens
     function recoverTokens(address token, uint256 amount) external onlyOwner {
-        require(IERC20(token).transfer(owner(), amount), "Transfer failed");
+        IERC20(token).transfer(msg.sender, amount);
     }
 }
