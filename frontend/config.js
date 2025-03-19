@@ -8,16 +8,24 @@ const CONFIG = {
             symbol: 'tBNB',
             decimals: 18
         },
-        rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+        rpcUrls: ['https://bsc-testnet.publicnode.com'],
         blockExplorerUrls: ['https://testnet.bscscan.com']
     },
     CONTRACTS: {
-        PEPE_TOKEN: '0xf8FAbd399e2E3B57761929d04d5eEdA13bcA43a5',
+        PEPE_TOKEN: '0x578a700c214AF091d377f942c15A2413306006bc',
         PEPE_TOKEN_ABI: [
             "function balanceOf(address) view returns (uint256)",
             "function approve(address spender, uint256 amount) returns (bool)",
             "function transfer(address to, uint256 amount) returns (bool)",
             "function decimals() view returns (uint8)"
+        ],
+        BSC_PEPE_STAKING: '0x6872f670A00069F30DCA9f2aee800AdEf8798681',
+        BSC_PEPE_STAKING_ABI: [
+            "function stake(uint256 poolId, uint256 amount)",
+            "function unstake(uint256 stakeIndex)",
+            "function getAllPoolsInfo() view returns (tuple(uint256 minStakeAmount, uint256 maxHolders, uint256 rewardPerHolder, uint256 totalStaked, uint256 currentHolders, bool isActive)[])",
+            "function getUserStakes(address) view returns (tuple(uint256 amount, uint256 startTime, uint256 poolId, bool hasClaimedReward)[])",
+            "function isAdmin(address) view returns (bool)"
         ]
     }
 };

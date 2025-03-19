@@ -1,8 +1,8 @@
 // Contract addresses from deployment
 const contractAddresses = {
-    pepeToken: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    dummyUSDT: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    pepeStaking: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    pepeToken: "0x578a700c214AF091d377f942c15A2413306006bc", // Updated address
+    dummyUSDT: "0xafFED4B10C3Dc1822bD992F56Dae9F6aBb8E0244", // Updated address
+    pepeStaking: "0x146a5B9aACB92aE9F39507AE62e5Dd1C2a07df23" // New staking contract address
 };
 
 // Contract ABIs
@@ -87,16 +87,16 @@ async function connectWallet() {
             return;
         }
 
-        // Check if we're on the correct network (Hardhat/localhost)
+        // Check if we're on the correct network (BSC Testnet)
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        if (chainId !== '0x7a69') { // Hardhat's chainId
+        if (chainId !== '0x61') { // BSC Testnet chainId
             try {
                 await window.ethereum.request({
                     method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: '0x7a69' }],
+                    params: [{ chainId: '0x61' }],
                 });
             } catch (switchError) {
-                showNotification('Please switch to the Hardhat/localhost network in MetaMask', true);
+                showNotification('Please switch to the BSC Testnet network in MetaMask', true);
                 return;
             }
         }

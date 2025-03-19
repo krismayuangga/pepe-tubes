@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - PEPE Staking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-purple-900 p-4 shadow-lg">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/24478.png" alt="PEPE" class="w-10 h-10">
+                <div>
+                    <h1 class="text-white text-2xl font-bold">PEPE Admin</h1>
+                    <span class="text-purple-300 text-sm">BSC Testnet</span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="connectWallet" class="bg-purple-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-600">
+                    <i class="fas fa-wallet mr-2"></i>Connect Wallet
+                </button>
+                <button id="setupButton" class="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700">
+                    <i class="fas fa-cog mr-2"></i>Setup Reward Token
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <p class="text-sm text-gray-500">Contract Balance</p>
+                <div class="flex items-baseline mt-1">
+                    <p id="contractUsdtBalance" class="text-2xl font-bold text-purple-600">0</p>
+                    <p class="ml-1 text-gray-500">USDT</p>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <p class="text-sm text-gray-500">Total Stakes</p>
+                <div class="flex items-baseline mt-1">
+                    <p id="totalStakes" class="text-2xl font-bold text-green-600">0</p>
+                    <p class="ml-1 text-gray-500">PEPE</p>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <p class="text-sm text-gray-500">Active Stakers</p>
+                <p id="activeStakers" class="text-2xl font-bold text-blue-600">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <p class="text-sm text-gray-500">Pending Rewards</p>
+                <div class="flex items-baseline mt-1">
+                    <p id="pendingRewards" class="text-2xl font-bold text-yellow-600">0</p>
+                    <p class="ml-1 text-gray-500">USDT</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Stakes -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold">Active Stakes</h2>
+                <button id="addUsdtButton" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-700">
+                    Add USDT to Contract
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Pool</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Address</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Time Left</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activeStakesContainer" class="divide-y divide-gray-200">
+                        <!-- Will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pool Management -->
+        <div class="grid md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-lg font-bold mb-4">Pool Status</h2>
+                <div id="poolStats" class="grid grid-cols-2 gap-4">
+                    <!-- Will be populated by JavaScript -->
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-lg font-bold mb-4">Quick Actions</h2>
+                <div class="space-y-4">
+                    <button id="distributeRewardsButton" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                        Distribute Available Rewards
+                    </button>
+                    <button id="emergencyPauseButton" class="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700">
+                        Emergency Pause
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notifications -->
+    <div id="notification" class="hidden fixed bottom-4 right-4 max-w-md bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg">
+        <p id="notificationText"></p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="admin-config.js"></script>
+    <script src="admin-app.js"></script>
+</body>
+</html>

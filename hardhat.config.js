@@ -18,16 +18,16 @@ module.exports = {
     }
   },
   networks: {
-    bscTestnet: {
-      url: BSC_TESTNET_URL,
+    bsc_testnet: {
+      url: process.env.BSC_TESTNET_URL || "https://bsc-testnet.publicnode.com",
       chainId: 97,
-      accounts: [PRIVATE_KEY],
-      gasPrice: 20000000000 // 20 Gwei
+      accounts: [process.env.PRIVATE_KEY],
+      gasPrice: 10000000000 // 10 gwei
     }
   },
   etherscan: {
     apiKey: {
-      bscTestnet: BSCSCAN_API_KEY
+      bscTestnet: process.env.BSCSCAN_API_KEY
     }
   },
   paths: {

@@ -1,88 +1,91 @@
 const hre = require("hardhat");
 
+async function waitForConfirmations(tx, confirmations = 5) {
+    console.log(`Waiting for ${confirmations} confirmations...`);
+    await tx.wait(confirmations);
+}
+
+async function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function main() {
-  console.log("Deploying contracts to BSC Testnet...");
+    console.log("Deploying BSCPEPEStaking contract to BSC Testnet...");
 
-  // Deploy PEPE Token
-  const PEPEToken = await hre.ethers.getContractFactory("PEPEToken");
-  const pepeToken = await PEPEToken.deploy();
-  await pepeToken.waitForDeployment();
-  console.log("PEPE Token deployed to:", await pepeToken.getAddress());
+    // Menggunakan alamat token yang sudah ada
+    const PEPE_TOKEN_ADDRESS = "0x578a700c214AF091d377f942c15A2413306006bc";
+    const USDT_ADDRESS = "0xafFED4B10C3Dc1822bD992F56Dae9F6aBb8E0244";
 
-  // Deploy Dummy USDT (for testing)
-  const DummyUSDT = await hre.ethers.getContractFactory("DummyUSDT");
-  const dummyUSDT = await DummyUSDT.deploy();
-  await dummyUSDT.waitForDeployment();
-  console.log("Dummy USDT deployed to:", await dummyUSDT.getAddress());
+    // Deploy Staking Contract
+    const BSCPEPEStaking = await hre.ethers.getContractFactory("BSCPEPEStaking");
+    const staking = await BSCPEPEStaking.deploy(PEPE_TOKEN_ADDRESS);
+    const deployTx = await staking.deploymentTransaction();
+    console.log("Deployment transaction hash:", deployTx.hash);
+    
+    // Wait for 5 confirmations
+    await waitForConfirmations(deployTx, 5);
+    
+    const stakingAddress = await staking.getAddress();
+    console.log("BSCPEPEStaking deployed to:", stakingAddress);
 
-  // Deploy Staking Contract
-  const BSCPEPEStaking = await hre.ethers.getContractFactory("BSCPEPEStaking");
-  const staking = await BSCPEPEStaking.deploy(await pepeToken.getAddress());
-  await staking.waitForDeployment();
-  console.log("BSC PEPE Staking deployed to:", await staking.getAddress());
+    // Set USDT sebagai reward token
+    await staking.setRewardToken(USDT_ADDRESS);
+    console.log("Set USDT as reward token");
 
-  // Set USDT as reward token
-  await staking.setRewardToken(await dummyUSDT.getAddress());
-  console.log("Set USDT as reward token");
+    // Update alamat di config dan deployed-addresses
+    const fs = require('fs');
+    
+    // Update deployed-addresses.json
+    const deployedAddresses = {
+        pepeToken: PEPE_TOKEN_ADDRESS,
+        dummyUSDT: USDT_ADDRESS,
+        staking: stakingAddress,
+        network: "bsc_testnet"
+    };
 
-  // Save deployment addresses
-  const fs = require('fs');
-  const deployedAddresses = {
-    pepeToken: await pepeToken.getAddress(),
-    dummyUSDT: await dummyUSDT.getAddress(),
-    staking: await staking.getAddress(),
-    network: "bsc_testnet"
-  };
+    fs.writeFileSync(
+        'deployed-addresses.json',
+        JSON.stringify(deployedAddresses, null, 2)
+    );
+    console.log("Deployment addresses saved to deployed-addresses.json");
 
-  fs.writeFileSync(
-    'deployed-addresses.json',
-    JSON.stringify(deployedAddresses, null, 2)
-  );
-  console.log("Deployment addresses saved to deployed-addresses.json");
+    // Update admin-config.js
+    let adminConfig = fs.readFileSync('frontend/admin-config.js', 'utf8');
+    adminConfig = adminConfig.replace(
+        /address: '0x[a-fA-F0-9]{40}', \/\/ Update dengan alamat kontrak baru/,
+        `address: '${stakingAddress}', // Update dengan alamat kontrak baru`
+    );
+    fs.writeFileSync('frontend/admin-config.js', adminConfig);
+    console.log("Updated contract address in admin-config.js");
 
-  // Verify contracts on BSCScan
-  console.log("\nVerifying contracts on BSCScan...");
-  
-  try {
-    await hre.run("verify:verify", {
-      address: await pepeToken.getAddress(),
-      constructorArguments: []
-    });
-    console.log("PEPE Token verified");
-  } catch (error) {
-    console.log("Error verifying PEPE Token:", error.message);
-  }
+    // Wait additional 30 seconds before verification
+    console.log("Waiting 30 seconds before verification...");
+    await delay(30000);
 
-  try {
-    await hre.run("verify:verify", {
-      address: await dummyUSDT.getAddress(),
-      constructorArguments: []
-    });
-    console.log("Dummy USDT verified");
-  } catch (error) {
-    console.log("Error verifying Dummy USDT:", error.message);
-  }
+    // Verify contract
+    console.log("\nVerifying contract on BSCScan...");
+    try {
+        await hre.run("verify:verify", {
+            address: stakingAddress,
+            constructorArguments: [PEPE_TOKEN_ADDRESS],
+            contract: "contracts/BSCPEPEStaking.sol:BSCPEPEStaking"
+        });
+        console.log("Contract verified successfully");
+    } catch (error) {
+        console.log("Error verifying contract:", error.message);
+        console.log("\nYou can try manual verification later using:");
+        console.log(`npx hardhat verify --network bsc_testnet ${stakingAddress} "${PEPE_TOKEN_ADDRESS}"`);
+    }
 
-  try {
-    await hre.run("verify:verify", {
-      address: await staking.getAddress(),
-      constructorArguments: [await pepeToken.getAddress()]
-    });
-    console.log("BSC PEPE Staking verified");
-  } catch (error) {
-    console.log("Error verifying BSC PEPE Staking:", error.message);
-  }
-
-  console.log("\nDeployment completed!");
-  console.log("Next steps:");
-  console.log("1. Fund the staking contract with USDT rewards");
-  console.log("2. Update the contract addresses in frontend/bsc-config.js");
-  console.log("3. Start the frontend server");
+    console.log("\nDeployment completed!");
+    console.log("\nNext steps:");
+    console.log("1. Set admin addresses using setAdmin()");
+    console.log("2. Fund the contract with USDT rewards");
 }
 
 main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+    .then(() => process.exit(0))
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
