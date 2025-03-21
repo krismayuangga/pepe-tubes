@@ -145,21 +145,50 @@
 
     <!-- Adjust main content margin to account for new navbar -->
     <main class="container mx-auto px-4 py-32">
-        <!-- Info Saldo -->
+        <!-- Info Saldo - Hanya satu section -->
         <div class="dark-card p-6 rounded-xl mb-8">
             <h2 class="text-xl font-semibold mb-4 text-white">Balance Information</h2>
-            <div class="grid md:grid-cols-3 gap-4">
-                <div class="bg-[#1a1a1a] p-4 rounded-lg border border-gray-800">
+            <div class="grid md:grid-cols-4 gap-4">
+                <div class="bg-[#1a1a1a] p-4 rounded-lg">
                     <p class="text-sm text-[#B4B4B4]">PEPE Balance</p>
                     <p id="pepeBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg border border-gray-800">
-                    <p class="text-sm text-[#B4B4B4]">Total Staking</p>
-                    <p id="totalStaked" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
+                <div class="bg-[#1a1a1a] p-4 rounded-lg">
+                    <p class="text-sm text-[#B4B4B4]">Staked PEPE</p>
+                    <p id="stakedBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg border border-gray-800">
-                    <p class="text-sm text-[#B4B4B4]">Reward USDT</p>
-                    <p id="totalRewards" class="text-xl font-bold text-[#00FFA3]">0 USDT</p>
+                <div class="bg-[#1a1a1a] p-4 rounded-lg">
+                    <p class="text-sm text-[#B4B4B4]">USDT Balance</p>
+                    <p id="usdtBalance" class="text-xl font-bold text-[#00FFA3]">0 USDT</p>
+                </div>
+                <div class="bg-[#1a1a1a] p-4 rounded-lg">
+                    <p class="text-sm text-[#B4B4B4]">Pending Rewards</p>
+                    <p id="pendingRewards" class="text-xl font-bold text-[#00FFA3]">0 USDT</p>
+                </div>
+                <div class="bg-[#1a1a1a] p-4 rounded-lg">
+                    <p class="text-sm text-[#B4B4B4]">Total PEPE Balance</p>
+                    <p id="totalBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lock Period & Active Stakes Section -->
+        <div class="dark-card p-6 rounded-xl mb-8">
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Lock Period Status -->
+                <div class="p-4 bg-[#1a1a1a] rounded-lg">
+                    <h3 class="font-semibold mb-2 text-white">Current Lock Period</h3>
+                    <div class="flex items-baseline">
+                        <span id="stakingPeriod" class="text-2xl font-bold text-[#00FFA3]">Loading...</span>
+                    </div>
+                </div>
+
+                <!-- Your Stakes -->
+                <div class="p-4 bg-[#1a1a1a] rounded-lg">
+                    <h3 class="font-semibold mb-2 text-white">Your Active Stakes</h3>
+                    <div id="activeStakesInfo" class="space-y-2">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -170,6 +199,16 @@
             <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="poolsContainer">
                 <!-- Pool cards akan ditambahkan secara dinamis oleh JavaScript -->
             </div>
+        </div>
+
+        <!-- Tambahkan tombol emergency recovery di bawah Pool Management Section -->
+        <div class="dark-card p-6 rounded-xl mb-8 mt-6">
+            <h2 class="text-xl font-bold mb-4 text-red-500">Emergency Recovery</h2>
+            <p class="text-gray-400 mb-4">If you're experiencing high gas fees or issues with unstaking, use the emergency recovery option.</p>
+            <button id="emergency-recovery" class="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 transition-all duration-200">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Emergency Recovery
+            </button>
         </div>
 
         <!-- Info Section -->
@@ -221,7 +260,7 @@
                     <p class="text-sm font-medium text-white">Informasi Pool:</p>
                     <div class="flex justify-between text-sm">
                         <span class="text-[#B4B4B4]">Lock Period:</span>
-                        <span class="text-white">30 hari</span>
+                        <span id="poolLockPeriod" class="text-white">5 Minutes (Testing)</span>
                     </div>
                     <div class="flex justify-between text-sm">
                         <span class="text-[#B4B4B4]">Reward:</span>

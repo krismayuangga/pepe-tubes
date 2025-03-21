@@ -23,7 +23,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
     mapping(address => Stake[]) public userStakes;
     Pool[] public pools;
 
-    uint256 public constant LOCK_PERIOD = 30 days;
+    uint256 public LOCK_PERIOD = 30 days;
 
     struct Pool {
         uint256 minStakeAmount;
@@ -45,6 +45,9 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
     event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 reward);
     event AdminSet(address indexed admin, bool status);
     event RewardTokenSet(address indexed token);
+    event LockPeriodUpdated(uint256 newPeriod);
+    event TokensRecovered(address token, uint256 amount);
+    event UnstakedEarly(address indexed user, uint256 indexed poolId, uint256 amount);
 
     modifier onlyAdmin() {
         require(isAdmin[msg.sender] || owner() == msg.sender, "Not admin");
@@ -73,6 +76,12 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit RewardTokenSet(token);
     }
 
+    function setLockPeriod(uint256 newPeriod) external onlyOwner {
+        require(newPeriod > 0, "Lock period must be > 0");
+        LOCK_PERIOD = newPeriod;
+        emit LockPeriodUpdated(newPeriod);
+    }
+
     function stake(uint256 poolId, uint256 amount) external nonReentrant {
         require(poolId < pools.length, "Invalid pool");
         Pool storage pool = pools[poolId];
@@ -95,25 +104,65 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit Staked(msg.sender, poolId, amount);
     }
 
+    // FIXED: Corrected unstake logic to properly handle stake removal
     function unstake(uint256 stakeIndex) external nonReentrant {
         require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
         Stake storage userStake = userStakes[msg.sender][stakeIndex];
-        Pool storage pool = pools[userStake.poolId];
+        
+        // Check stake status 
+        require(!userStake.hasClaimedReward, "Already unstaked");
         require(block.timestamp >= userStake.startTime + LOCK_PERIOD, "Stake is still locked");
-
+        
+        // Cache values before modifying storage
         uint256 amount = userStake.amount;
-        uint256 reward = pool.rewardPerHolder;
-
-        pepeToken.transfer(msg.sender, amount);
-        if (!userStake.hasClaimedReward) {
-            rewardToken.transfer(msg.sender, reward);
-            userStake.hasClaimedReward = true;
-        }
-
+        uint256 poolId = userStake.poolId;
+        
+        // Update stake record first to prevent reentrancy
+        userStake.hasClaimedReward = true;
+        
+        // Update pool data
+        Pool storage pool = pools[poolId];
         pool.totalStaked -= amount;
         pool.currentHolders -= 1;
+        
+        // Transfer tokens only after state changes
+        uint256 reward = pool.rewardPerHolder;
+        bool pepeSuccess = pepeToken.transfer(msg.sender, amount);
+        require(pepeSuccess, "PEPE transfer failed");
+        
+        bool rewardSuccess = rewardToken.transfer(msg.sender, reward);
+        require(rewardSuccess, "Reward transfer failed");
 
-        emit Unstaked(msg.sender, userStake.poolId, amount, reward);
+        emit Unstaked(msg.sender, poolId, amount, reward);
+    }
+
+    // Tambahkan fungsi ini setelah fungsi unstake() yang sudah ada
+    function unstakeEarly(uint256 stakeIndex) external nonReentrant {
+        require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
+        Stake storage userStake = userStakes[msg.sender][stakeIndex];
+        
+        // Check stake status, hanya memeriksa apakah sudah unstake sebelumnya
+        require(!userStake.hasClaimedReward, "Already unstaked");
+        
+        // Cache values before modifying storage
+        uint256 amount = userStake.amount;
+        uint256 poolId = userStake.poolId;
+        
+        // Update stake record first to prevent reentrancy
+        userStake.hasClaimedReward = true;
+        
+        // Update pool data
+        Pool storage pool = pools[poolId];
+        pool.totalStaked -= amount;
+        pool.currentHolders -= 1;
+        
+        // Transfer hanya token PEPE, tanpa reward USDT
+        bool pepeSuccess = pepeToken.transfer(msg.sender, amount);
+        require(pepeSuccess, "PEPE transfer failed");
+        
+        // Reward tidak diberikan untuk unstake sebelum waktunya
+        
+        emit UnstakedEarly(msg.sender, poolId, amount);
     }
 
     function getUserStakes(address user) external view returns (Stake[] memory) {
@@ -129,7 +178,23 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         return pools;
     }
 
+    // Added additional safety checks
     function recoverTokens(address token, uint256 amount) external onlyOwner {
-        IERC20(token).transfer(msg.sender, amount);
+        require(amount > 0, "Amount must be > 0");
+        require(IERC20(token).balanceOf(address(this)) >= amount, "Insufficient balance");
+        
+        bool success = IERC20(token).transfer(msg.sender, amount);
+        require(success, "Token transfer failed");
+        
+        emit TokensRecovered(token, amount);
+    }
+
+    // Added option to add USDT rewards
+    function addUSDT(uint256 amount) external onlyAdmin {
+        require(address(rewardToken) != address(0), "Reward token not set");
+        require(amount > 0, "Amount must be > 0");
+        
+        bool success = rewardToken.transferFrom(msg.sender, address(this), amount);
+        require(success, "Transfer failed");
     }
 }

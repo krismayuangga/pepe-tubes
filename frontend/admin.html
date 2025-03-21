@@ -67,6 +67,26 @@
             </div>
         </div>
 
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Lock Period Status -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h3 class="font-semibold mb-2">Current Lock Period</h3>
+                    <div class="flex items-baseline">
+                        <span id="stakingPeriod" class="text-2xl font-bold text-purple-600">Loading...</span>
+                    </div>
+                </div>
+
+                <!-- Total Distributed Status -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h3 class="font-semibold mb-2">Total Rewards Distributed</h3>
+                    <div class="flex items-baseline">
+                        <span id="totalDistributed" class="text-2xl font-bold text-green-600">0 USDT</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Active Stakes -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-8">
             <div class="flex justify-between items-center mb-6">
@@ -88,6 +108,7 @@
                     </thead>
                     <tbody id="activeStakesContainer" class="divide-y divide-gray-200">
                         <!-- Will be populated by JavaScript -->
+                        <tr><td colspan="5" class="px-4 py-3 text-center text-gray-500">Loading stakes...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -113,6 +134,51 @@
                 </div>
             </div>
         </div>
+
+        <!-- Lock Period Management -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <h2 class="text-lg font-bold mb-4">Lock Period Management</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Quick Lock Period -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h3 class="font-semibold mb-2">Quick Set</h3>
+                    <select id="quickLockPeriod" class="w-full border rounded px-3 py-2 mb-2">
+                        <option value="300">5 Minutes (Testing)</option>
+                        <option value="3600">1 Hour</option>
+                        <option value="86400">1 Day</option>
+                        <option value="604800">7 Days</option>
+                        <option value="2592000">30 Days</option>
+                    </select>
+                    <button onclick="setQuickLockPeriod()" 
+                            class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                        Set Lock Period
+                    </button>
+                </div>
+                
+                <!-- Custom Lock Period -->
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <h3 class="font-semibold mb-2">Custom Period</h3>
+                    <div class="flex space-x-2 mb-2">
+                        <input type="number" id="customLockPeriod" 
+                               class="flex-1 border rounded px-3 py-2" 
+                               placeholder="Enter days">
+                        <button onclick="setCustomLockPeriod()"
+                                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                            Set Custom
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Current Lock Period Display -->
+            <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                <p class="text-sm text-gray-500">Current Lock Period:</p>
+                <div class="flex items-baseline">
+                    <span id="currentLockPeriod" class="text-2xl font-bold text-purple-600">0</span>
+                    <span class="ml-2 text-gray-500">days</span>
+                </div>
+                <p id="lockPeriodInSeconds" class="text-sm text-gray-400 mt-1"></p>
+            </div>
+        </div>
     </main>
 
     <!-- Notifications -->
@@ -123,6 +189,37 @@
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="admin-config.js"></script>
+    <script>
+    // Tambahkan script diagnostik untuk memeriksa jika tombol Connect Wallet berfungsi
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("DOM fully loaded and parsed");
+        
+        const connectWalletBtn = document.getElementById('connectWallet');
+        if (connectWalletBtn) {
+            console.log("Connect wallet button found:", connectWalletBtn);
+            connectWalletBtn.addEventListener('click', function() {
+                console.log("Connect wallet button clicked");
+                // Cek apakah MetaMask terinstall
+                if (typeof window.ethereum !== 'undefined') {
+                    console.log("MetaMask terdeteksi");
+                    // Pastikan admin-app.js sudah dimuat dengan benar
+                    if (typeof connectWallet === 'function') {
+                        connectWallet();
+                    } else {
+                        console.error("Function connectWallet not found! admin-app.js might not be loaded correctly");
+                        alert("Error: admin-app.js tidak dimuat dengan benar. Mohon periksa console.");
+                    }
+                } else {
+                    console.error("MetaMask tidak terdeteksi!");
+                    alert("MetaMask tidak terdeteksi! Silakan install MetaMask terlebih dahulu.");
+                }
+            });
+        } else {
+            console.error("Connect wallet button not found!");
+        }
+    });
+    </script>
     <script src="admin-app.js"></script>
+
 </body>
 </html>

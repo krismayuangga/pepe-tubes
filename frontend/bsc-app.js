@@ -1,4 +1,4 @@
-let provider, signer, pepeToken, stakingContract;
+let provider, signer, pepeToken, stakingContract, usdtToken;  // Add usdtToken here
 let userAddress = null;
 let poolsInfo = [];
 let userStakes = [];
@@ -24,22 +24,27 @@ function formatAmount(amount, decimals = 18) {
 }
 
 // Pool Card Template
-function createPoolCard(pool, index) {
-    const poolConfig = CONFIG.pools[index];
-    const totalStaked = pool.totalStaked ? formatAmount(pool.totalStaked) : "0";
-    const userStake = userStakes.find(stake => Number(stake.poolId) === index);
-    const hasStake = userStake && Number(formatAmount(userStake.amount)) > 0;
+async function createPoolCard(pool, index) {
+    if (!pool || !CONFIG.pepeStaking.pools[index]) return '';
+
+    // Get current lock period from contract
+    const lockPeriod = await stakingContract.LOCK_PERIOD();
     
-    // Hitung sisa waktu staking
-    const timeRemaining = hasStake ? calculateTimeRemaining(userStake.startTime) : null;
-    const canClaim = hasStake && (Date.now() / 1000 >= Number(userStake.startTime) + LOCK_PERIOD);
+    // Cari stake yang aktif di pool ini
+    const activeStake = userStakes.find(stake => 
+        Number(stake.poolId) === index && 
+        !stake.hasClaimedReward
+    );
+    
+    const poolConfig = CONFIG.pepeStaking.pools[index];
+    const totalStaked = formatAmount(pool.totalStaked);
 
     return `
         <div class="pool-card rounded-xl p-6">
             <div class="flex justify-between items-start mb-4">
                 <div>
                     <h3 class="text-lg font-bold text-white">${poolConfig.name}</h3>
-                    <p class="text-[#B4B4B4] text-sm">Lock Period: 30 days</p>
+                    <p class="text-[#B4B4B4] text-sm">Lock Period: ${formatLockPeriod()}</p>
                 </div>
                 <div class="text-right">
                     <p class="text-2xl font-bold text-[#00FFA3]">${poolConfig.reward} USDT</p>
@@ -58,48 +63,90 @@ function createPoolCard(pool, index) {
                 </div>
                 <div class="flex justify-between text-sm">
                     <span class="text-[#B4B4B4]">Slots:</span>
-                    <span class="font-medium text-white">${pool.currentHolders || 0}/${poolConfig.maxHolders}</span>
+                    <span class="font-medium text-white">${pool.currentHolders}/${pool.maxHolders}</span>
                 </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-[#B4B4B4]">Your Stake:</span>
-                    <span class="font-medium text-white">${hasStake ? Number(formatAmount(userStake.amount)).toLocaleString() : "0"} PEPE</span>
-                </div>
-                
-                ${hasStake ? `
-                    <div class="flex justify-between text-sm">
-                        <span class="text-[#B4B4B4]">Time Remaining:</span>
-                        <span class="font-medium ${canClaim ? 'text-[#00FFA3]' : ''}">${formatTimeRemaining(timeRemaining)}</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-[#B4B4B4]">Status:</span>
-                        <span class="font-medium ${canClaim ? 'text-[#00FFA3]' : 'text-yellow-600'}">
-                            ${canClaim ? 'Ready to Claim' : 'Locked'}
-                        </span>
-                    </div>
-                ` : ''}
+                ${activeStake ? generateActiveStakeInfo(activeStake, lockPeriod) : ''}
             </div>
 
             <div class="space-y-2">
-                ${(!pool.currentHolders || pool.currentHolders < poolConfig.maxHolders) && pool.isActive ? `
-                    <button onclick="openStakeModal(${index})" 
-                            class="w-full gradient-button text-black py-2 rounded-lg font-semibold">
-                        Stake ${poolConfig.minPepe} PEPE
-                    </button>
-                ` : `
-                    <button disabled 
-                            class="w-full bg-gray-800 text-gray-500 py-2 rounded-lg font-semibold cursor-not-allowed">
-                        Pool Full
-                    </button>
-                `}
-                
-                ${hasStake ? `
-                    <button onclick="unstakeFromPool(${index})" 
-                            class="w-full border border-[#00FFA3] text-[#00FFA3] py-2 rounded-lg font-semibold hover:bg-[#00FFA3] hover:text-black transition-colors">
-                        Unstake ${Number(formatAmount(userStake.amount)).toLocaleString()} PEPE
-                    </button>
-                ` : ''}
+                ${activeStake ? 
+                    generateUnstakeButton(index, activeStake, lockPeriod) : 
+                    generateStakeButton(poolConfig.minPepe, index)}
             </div>
         </div>
+    `;
+}
+
+// Add helper function untuk generate active stake info
+function generateActiveStakeInfo(stake, lockPeriod) {
+    const now = Math.floor(Date.now() / 1000);
+    const endTime = Number(stake.startTime) + Number(lockPeriod);
+    const timeLeft = endTime - now;
+    const status = timeLeft <= 0 ? '🟢 READY' : '🟡 LOCKED';
+    const statusColor = timeLeft <= 0 ? 'text-[#00FFA3]' : 'text-yellow-500';
+
+    return `
+        <div class="border-t border-gray-700 pt-3 mt-3">
+            <div class="flex justify-between text-sm">
+                <span class="text-[#B4B4B4]">Your Stake:</span>
+                <span class="font-medium text-white">${Number(formatAmount(stake.amount)).toLocaleString()} PEPE</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-[#B4B4B4]">Time Left:</span>
+                <span class="font-medium">${timeLeft > 0 ? timeLeft + " seconds" : "COMPLETED"}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-[#B4B4B4]">Status:</span>
+                <span class="font-medium ${statusColor}">${status}</span>
+            </div>
+        </div>
+    `;
+}
+
+// Modifikasi fungsi generateUnstakeButton untuk menampilkan opsi early unstake
+function generateUnstakeButton(poolId, stake, lockPeriod) {
+    const now = Math.floor(Date.now() / 1000);
+    const endTime = Number(stake.startTime) + Number(lockPeriod);
+    const canUnstake = now >= endTime;
+    
+    return `
+        <div class="space-y-2">
+            <button onclick="unstakeFromPool(${poolId})" 
+                    class="w-full ${canUnstake ? 'border border-[#00FFA3] text-[#00FFA3]' : 'bg-gray-600 text-gray-400'} py-2 rounded-lg font-semibold transition-colors"
+                    ${!canUnstake ? 'disabled' : ''}>
+                ${canUnstake ? 'Unstake with Reward' : 'Locked'}
+            </button>
+            ${!canUnstake ? `
+                <button onclick="unstakeEarlyFromPool(${poolId})" 
+                        class="w-full border border-red-500 text-red-500 py-2 rounded-lg font-semibold hover:bg-red-500 hover:text-white transition-colors">
+                    Early Unstake (No Reward)
+                </button>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Add helper function untuk generate buttons
+function generateUnstakeButton(poolId, stake, lockPeriod) {
+    const now = Math.floor(Date.now() / 1000);
+    const endTime = Number(stake.startTime) + Number(lockPeriod);
+    const canUnstake = now >= endTime;
+    
+    return `
+        <button onclick="unstakeFromPool(${poolId})" 
+                class="w-full ${canUnstake ? 'border border-[#00FFA3] text-[#00FFA3]' : 'bg-gray-600 text-gray-400'} py-2 rounded-lg font-semibold transition-colors"
+                ${!canUnstake ? 'disabled' : ''}>
+            ${canUnstake ? 'Unstake' : 'Locked'}
+        </button>
+    `;
+}
+
+function generateStakeButton(minPepe, poolId) {
+    return `
+        <button onclick="openStakeModal(${poolId})" 
+                class="w-full gradient-button text-black py-2 rounded-lg font-semibold">
+            Stake ${minPepe} PEPE
+        </button>
     `;
 }
 
@@ -126,7 +173,7 @@ function formatTimeRemaining(seconds) {
 // Modal Functions
 function openStakeModal(poolId) {
     selectedPoolId = poolId;
-    const poolConfig = CONFIG.pools[poolId];
+    const poolConfig = CONFIG.pepeStaking.pools[poolId];
     document.getElementById('stakeModal').classList.remove('hidden');
     document.getElementById('minStake').textContent = `${poolConfig.minPepe} PEPE`;
     document.getElementById('poolReward').textContent = `${poolConfig.reward} USDT`;
@@ -180,33 +227,43 @@ async function confirmStake() {
     }
 }
 
+// Perbaikan fungsi unstake
 async function unstakeFromPool(poolId) {
     try {
         console.log('Starting unstake process for pool:', poolId);
-        console.log('Available stakes:', userStakes);
-
-        // Find stake index (hapus duplikasi)
-        const stakeIndex = userStakes.findIndex(stake => Number(stake.poolId) === Number(poolId));
-        console.log('Found stake at index:', stakeIndex);
-
-        if (stakeIndex === -1) {
-            showNotification('No stake found for this pool', true);
-            return;
-        }
-
-        // Confirm unstake
-        if (!confirm('Are you sure you want to unstake? If it\'s before 30 days, you will not receive rewards.')) {
-            return;
-        }
-
-        // Execute unstake transaction
-        const tx = await stakingContract.unstake(stakeIndex);
-        console.log('Unstake transaction sent:', tx.hash);
         
-        showNotification('Unstaking in progress...');
+        if (!stakingContract || !userAddress) {
+            showNotification('Please connect your wallet first', true);
+            return;
+        }
+
+        // Cari stake dengan poolId yang sesuai
+        const stakes = await stakingContract.getUserStakes(userAddress);
+        let stakeIndex = -1;
+        
+        for (let i = 0; i < stakes.length; i++) {
+            if (Number(stakes[i].poolId) === Number(poolId) && !stakes[i].hasClaimedReward) {
+                stakeIndex = i;
+                break;
+            }
+        }
+        
+        if (stakeIndex === -1) {
+            showNotification('No active stake found for this pool', true);
+            return;
+        }
+        
+        console.log(`Found stake at index ${stakeIndex}`);
+        
+        // Eksekusi unstake dengan gas limit yang dioptimasi
+        const tx = await stakingContract.unstake(stakeIndex, {
+            gasLimit: 300000 // Gunakan gas limit yang lebih kecil tapi cukup
+        });
+        
+        showNotification('Unstaking transaction sent. Please wait...');
         await tx.wait();
         
-        showNotification('Successfully unstaked PEPE tokens!');
+        showNotification('Successfully unstaked tokens!');
         await updateUI();
     } catch (error) {
         console.error('Error unstaking:', error);
@@ -214,75 +271,154 @@ async function unstakeFromPool(poolId) {
     }
 }
 
+// Perbaikan function unstakeByIndex
+async function unstakeByIndex(index) {
+    try {
+        console.log(`Unstaking by index: ${index}`);
+        
+        if (!stakingContract || !userAddress) {
+            showNotification('Please connect your wallet first', true);
+            return;
+        }
+        
+        // Gunakan gas limit yang dioptimasi
+        const tx = await stakingContract.unstake(index, {
+            gasLimit: 300000 // Cukup untuk proses unstake tapi tidak berlebihan
+        });
+        
+        showNotification('Unstaking transaction sent. Please wait...');
+        await tx.wait();
+        
+        showNotification('Successfully unstaked tokens!');
+        await updateUI();
+    } catch (error) {
+        console.error('Error unstaking:', error);
+        showNotification(error.message, true);
+    }
+}
+
+// Tambahkan fungsi untuk early unstake
+async function unstakeEarlyFromPool(poolId) {
+    try {
+        if (!stakingContract || !userAddress) {
+            showNotification('Please connect your wallet first', true);
+            return;
+        }
+
+        // Konfirmasi kehilangan reward
+        if (!confirm('WARNING: You will lose all rewards if you unstake now. Continue?')) {
+            return;
+        }
+
+        // Cari stake dengan poolId yang sesuai
+        const stakes = await stakingContract.getUserStakes(userAddress);
+        let stakeIndex = -1;
+        
+        for (let i = 0; i < stakes.length; i++) {
+            if (Number(stakes[i].poolId) === Number(poolId) && !stakes[i].hasClaimedReward) {
+                stakeIndex = i;
+                break;
+            }
+        }
+        
+        if (stakeIndex === -1) {
+            showNotification('No active stake found for this pool', true);
+            return;
+        }
+        
+        console.log(`Found stake at index ${stakeIndex} for early unstake`);
+        
+        // Eksekusi unstakeEarly dengan gas limit yang dioptimasi
+        const tx = await stakingContract.unstakeEarly(stakeIndex, {
+            gasLimit: 300000
+        });
+        
+        showNotification('Early unstaking transaction sent. Please wait...');
+        await tx.wait();
+        
+        showNotification('Successfully unstaked tokens (without reward)');
+        await updateUI();
+    } catch (error) {
+        console.error('Error during early unstake:', error);
+        showNotification(error.message, true);
+    }
+}
+
 // Update UI
 async function updateUI() {
     try {
-        if (stakingContract && userAddress) {
-            // Get user stakes
-            userStakes = await stakingContract.getUserStakes(userAddress);
-            console.log('Current user stakes:', userStakes);
+        if (!stakingContract || !userAddress) return;
 
-            // Get pools info
-            poolsInfo = await stakingContract.getAllPoolsInfo();
-            console.log('Pools info:', poolsInfo);
+        // Get fresh data
+        const [allStakes, pools, lockPeriod, pepeBalance] = await Promise.all([
+            stakingContract.getUserStakes(userAddress),
+            stakingContract.getAllPoolsInfo(),
+            stakingContract.LOCK_PERIOD(),
+            pepeToken.balanceOf(userAddress)
+        ]);
+
+        // Calculate total staked amount
+        const totalStakedAmount = allStakes.reduce((acc, stake) => 
+            !stake.hasClaimedReward ? acc.add(stake.amount) : acc, 
+            ethers.BigNumber.from(0)
+        );
+
+        // Calculate available (unstaked) balance
+        const availableBalance = pepeBalance;
+
+        // Update UI elements with clear labeling
+        document.getElementById('pepeBalance').textContent = 
+            `${Number(formatAmount(availableBalance)).toLocaleString()} PEPE (Available)`;
+        document.getElementById('stakedBalance').textContent = 
+            `${Number(formatAmount(totalStakedAmount)).toLocaleString()} PEPE (Staked)`;
+
+        // Add total balance display if needed
+        const totalBalance = availableBalance.add(totalStakedAmount);
+        if (document.getElementById('totalBalance')) {
+            document.getElementById('totalBalance').textContent = 
+                `${Number(formatAmount(totalBalance)).toLocaleString()} PEPE (Total)`;
         }
 
+        // Update lock period display
+        const minutes = Math.floor(Number(lockPeriod) / 60);
+        const stakingPeriodEl = document.getElementById('stakingPeriod');
+        if (stakingPeriodEl) {
+            stakingPeriodEl.textContent = `${minutes} Minutes (Testing)`;
+            stakingPeriodEl.classList.remove('text-gray-500');
+            stakingPeriodEl.classList.add('text-[#00FFA3]');
+        }
+
+        // Filter stakes dan update pools
+        userStakes = allStakes.filter(stake => !stake.hasClaimedReward);
+        poolsInfo = pools;
+
+        // Update USDT balance
+        const usdtBalance = await usdtToken.balanceOf(userAddress);
+
+        // Update UI elements
+        document.getElementById('usdtBalance').textContent = 
+            `${Number(formatAmount(usdtBalance)).toLocaleString()} USDT`;
+
+        // Update active stakes info
+        await updateActiveStakesInfo();
+
         // Update pools display
-        document.getElementById('poolsContainer').innerHTML = CONFIG.pools.map((poolConfig, index) => {
-            const pool = poolsInfo[index] || {
-                minStakeAmount: "0",
-                totalStaked: "0",
-                currentHolders: 0,
-                isActive: true
-            };
-            return createPoolCard(pool, index);
-        }).join('');
-
-        if (stakingContract) {
-            if (userAddress) {
-                const pepeBalance = await pepeToken.balanceOf(userAddress);
-                document.getElementById('pepeBalance').textContent = 
-                    `${Number(formatAmount(pepeBalance)).toLocaleString()} PEPE`;
-
-                // Calculate total staked
-                let totalStaked = ethers.BigNumber.from(0);
-                for (let i = 0; i < userStakes.length; i++) {
-                    totalStaked = totalStaked.add(userStakes[i].amount);
-                }
-                document.getElementById('totalStaked').textContent = 
-                    `${Number(formatAmount(totalStaked)).toLocaleString()} PEPE`;
-
-                // Calculate total rewards
-                let totalRewards = ethers.BigNumber.from(0);
-                for (let i = 0; i < userStakes.length; i++) {
-                    const stake = userStakes[i];
-                    const pool = poolsInfo[stake.poolId];
-                    if (Date.now() / 1000 >= stake.startTime + LOCK_PERIOD && !stake.hasClaimedReward) {
-                        totalRewards = totalRewards.add(pool.rewardPerHolder);
-                    }
-                }
-                document.getElementById('totalRewards').textContent = 
-                    `${Number(formatAmount(totalRewards)).toLocaleString()} USDT`;
-
-                // Reset total staked if user has no active stakes
-                if (totalStaked.isZero()) {
-                    document.getElementById('totalStaked').textContent = "0 PEPE";
-                }
-            } else {
-                // Reset balances if user is not connected
-                document.getElementById('totalStaked').textContent = "0 PEPE";
-                document.getElementById('pepeBalance').textContent = "0 PEPE";
-                document.getElementById('totalRewards').textContent = "0 USDT";
-            }
-
-            // Update pools display with contract data
-            document.getElementById('poolsContainer').innerHTML = 
-                poolsInfo.map((pool, index) => createPoolCard(pool, index)).join('');
+        const poolsContainer = document.getElementById('poolsContainer');
+        if (pools && poolsContainer) {
+            const poolsHTML = await Promise.all(pools.map(async (pool, index) => {
+                return createPoolCard(pool, index);
+            }));
+            poolsContainer.innerHTML = poolsHTML.join('');
         }
     } catch (error) {
         console.error('Error updating UI:', error);
-        showNotification('Error updating display', true);
     }
+}
+
+// Add helper function untuk format lock period
+function formatLockPeriod() {
+    // For testing we show 5 minutes
+    return "5 Minutes (Testing)";
 }
 
 // Connect Wallet
@@ -321,6 +457,13 @@ async function connectWallet() {
             signer
         );
 
+        // Add USDT contract initialization
+        usdtToken = new ethers.Contract(
+            CONFIG.dummyUSDT.address,
+            CONFIG.dummyUSDT.abi,
+            signer
+        );
+
         // Check PEPE balance
         const pepeBalance = await pepeToken.balanceOf(userAddress);
         console.log('PEPE balance:', ethers.utils.formatEther(pepeBalance)); // Debug log
@@ -332,8 +475,6 @@ async function connectWallet() {
         connectWalletBtn.classList.add('bg-green-100', 'text-green-800', 'cursor-default');
 
         await updateUI();
-        setInterval(updateUI, 10000);
-
         showNotification('Wallet berhasil terhubung!');
     } catch (error) {
         console.error('Connection error:', error);
@@ -368,29 +509,159 @@ async function switchToBSCTestnet() {
 
 // Update UI setiap detik untuk timer
 function startTimers() {
-    setInterval(() => {
+    setInterval(async () => {
         if (userStakes.length > 0) {
-            updateUI();
+            await updateUI();
         }
-    }, 1000);
+        
+        // Update lock period separately
+        try {
+            const lockPeriod = await stakingContract.LOCK_PERIOD();
+            const minutes = Math.floor(Number(lockPeriod) / 60);
+            const stakingPeriodEl = document.getElementById('stakingPeriod');
+            if (stakingPeriodEl) {
+                stakingPeriodEl.textContent = `${minutes} Minutes (Testing)`;
+            }
+        } catch (error) {
+            console.error('Error updating lock period:', error);
+        }
+    }, 10000);
 }
 
 // Event Listeners
 window.addEventListener('load', () => {
     // Display initial pool cards
     updateUI();
-
-    // Setup event listeners
     document.getElementById('connectWallet').addEventListener('click', connectWallet);
     if (window.ethereum && window.ethereum.selectedAddress) {
         connectWallet();
     }
-
     window.ethereum.on('accountsChanged', () => {
         window.location.reload();
     });
-
     window.ethereum.on('chainChanged', () => {
         window.location.reload();
     });
+    startTimers();
+});
+
+async function updateActiveStakesInfo() {
+    const container = document.getElementById('activeStakesInfo');
+    if (!stakingContract || !container) return;
+
+    const stakes = await stakingContract.getUserStakes(userAddress);
+    const lockPeriod = await stakingContract.LOCK_PERIOD();
+    const activeStakes = stakes.filter(stake => !stake.hasClaimedReward);
+
+    if (activeStakes.length === 0) {
+        container.innerHTML = '<p class="text-gray-500">No active stakes</p>';
+        return;
+    }
+
+    const stakesHTML = await Promise.all(activeStakes.map(async (stake, index) => {
+        const now = Math.floor(Date.now() / 1000);
+        const endTime = Number(stake.startTime) + Number(lockPeriod);
+        const timeLeft = endTime - now;
+        const status = timeLeft <= 0 ? '🟢 READY' : '🟡 LOCKED';
+        const statusColor = timeLeft <= 0 ? 'text-[#00FFA3]' : 'text-yellow-500';
+
+        return `
+            <div class="border-b border-gray-700 last:border-0 pb-2">
+                <div class="flex justify-between mb-1">
+                    <span class="text-[#B4B4B4]">Pool #${Number(stake.poolId) + 1}</span>
+                    <span class="font-medium text-white">${formatAmount(stake.amount)} PEPE</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-[#B4B4B4]">Status:</span>
+                    <span class="${statusColor}">${status}</span>
+                </div>
+                ${timeLeft <= 0 ? `
+                <div class="flex justify-end mt-2">
+                    <button onclick="unstakeFromPool(${stake.poolId})" 
+                        class="w-full mt-2 border border-[#00FFA3] text-[#00FFA3] py-1 rounded text-sm hover:bg-[#00FFA3] hover:text-black transition-colors">
+                        Unstake
+                    </button>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }));
+
+    container.innerHTML = stakesHTML.join('');
+}
+
+// Emergency recovery function
+async function emergencyRecovery() {
+    try {
+        if (!stakingContract || !userAddress) {
+            showNotification('Please connect your wallet first', true);
+            return;
+        }
+        
+        console.log('Starting emergency recovery process...');
+        showNotification('Emergency recovery initiated');
+        
+        // Coba gunakan recoverTokens jika user adalah owner
+        try {
+            const owner = await stakingContract.owner();
+            const isOwner = owner.toLowerCase() === userAddress.toLowerCase();
+            
+            if (isOwner) {
+                const stakes = await stakingContract.getUserStakes(userAddress);
+                if (stakes.length === 0) {
+                    showNotification('No active stakes found', true);
+                    return;
+                }
+                
+                // Temukan stake pertama yang belum diklaim
+                let activeStake = null;
+                for (const stake of stakes) {
+                    if (!stake.hasClaimedReward) {
+                        activeStake = stake;
+                        break;
+                    }
+                }
+                
+                if (!activeStake) {
+                    showNotification('No unclaimed stakes found', true);
+                    return;
+                }
+                
+                // Recover tokens as owner
+                const tx = await stakingContract.recoverTokens(
+                    CONFIG.pepeToken.address, 
+                    activeStake.amount,
+                    { gasLimit: 300000 }
+                );
+                
+                await tx.wait();
+                showNotification('Emergency recovery successful!');
+                await refreshBalances();
+                await refreshStakes();
+                return;
+            }
+        } catch (error) {
+            console.error('Owner recovery failed:', error);
+        }
+        
+        // Jika bukan owner, coba emergency unstake
+        await emergencyUnstake();
+        
+    } catch (error) {
+        console.error('Emergency recovery error:', error);
+        showNotification(`Recovery error: ${error.message}`, true);
+    }
+}
+
+// Tambahkan ke event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // ...existing code...
+    
+    // Tambahkan event listener untuk tombol emergency
+    const emergencyButton = document.getElementById('emergency-recovery');
+    if (emergencyButton) {
+        emergencyButton.addEventListener('click', emergencyRecovery);
+    }
+    
+    // ...existing code...
 });
