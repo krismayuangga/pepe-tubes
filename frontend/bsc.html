@@ -83,12 +83,21 @@
         .glow-1 {
             top: -250px;
             left: -250px;
-            background: radial-gradient(circle, rgba(153, 69, 255, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(127, 0, 255, 0.2), transparent 70%);
         }
         .glow-2 {
             bottom: -250px;
             right: -250px;
-            background: radial-gradient(circle, rgba(20, 241, 149, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(20, 241, 149, 0.2), transparent 70%);
+        }
+        
+        .warning-notification {
+            background-color: #FFC107;
+            color: #212121;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -97,45 +106,24 @@
     <div class="glow glow-1"></div>
     <div class="glow glow-2"></div>
     
-    <!-- Updated Navigation -->
+    <!-- Updated Navigation with Links -->
     <nav class="nav-bg fixed w-full z-50 border-b border-gray-800">
         <div class="container mx-auto px-4">
             <div class="flex flex-col md:flex-row justify-between items-center py-4">
-                <!-- Logo & Brand -->
-                <div class="flex items-center mb-4 md:mb-0">
-                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/24478.png" alt="PEPE" class="w-10 h-10 mr-3">
-                    <div>
-                        <h1 class="text-white text-2xl font-bold">PEPE Finance</h1>
-                        <span class="text-[#00FFA3] text-sm">BSC Testnet</span>
-                    </div>
+                <div class="flex items-center space-x-4 mb-4 md:mb-0">
+                    <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/24478.png" alt="PEPE" class="w-10 h-10">
+                    <h1 class="text-white text-2xl font-bold">PEPE Staking</h1>
                 </div>
-                
-                <!-- Navigation Links -->
-                <div class="flex items-center space-x-1 mb-4 md:mb-0">
-                    <a href="index.html" class="px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#ffffff1a] transition-all">
-                        <i class="fas fa-home mr-2"></i>Home
-                    </a>
-                    <a href="bsc.html" class="px-4 py-2 rounded-lg text-white bg-[#ffffff1a]">
-                        <i class="fas fa-lock mr-2"></i>Staking
-                    </a>
-                    <a href="#" class="px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#ffffff1a] transition-all">
-                        <i class="fas fa-sync mr-2"></i>Swap
-                    </a>
-                    <a href="#" class="px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#ffffff1a] transition-all">
-                        <i class="fas fa-chart-line mr-2"></i>Analytics
-                    </a>
-                    <a href="docs.html" class="px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#ffffff1a] transition-all">
-                        <i class="fas fa-book mr-2"></i>Docs
-                    </a>
+                <!-- New Navigation Links -->
+                <div class="flex items-center space-x-8 mb-4 md:mb-0">
+                    <a href="#" class="text-white hover:text-green-400 transition-colors">Home</a>
+                    <a href="#" class="text-green-400 font-medium">Staking</a>
+                    <a href="#" class="text-white hover:text-green-400 transition-colors">Swap</a>
+                    <a href="#" class="text-white hover:text-green-400 transition-colors">Analytics</a>
+                    <a href="#" class="text-white hover:text-green-400 transition-colors">Docs</a>
                 </div>
-
-                <!-- Wallet Connect Button -->
                 <div class="flex items-center space-x-4">
-                    <div class="hidden md:flex items-center bg-[#ffffff1a] rounded-lg px-3 py-1 mr-4">
-                        <img src="https://bscscan.com/images/svg/brands/bnb.svg" alt="BSC" class="w-5 h-5 mr-2">
-                        <span class="text-gray-300">BSC Testnet</span>
-                    </div>
-                    <button id="connectWallet" class="gradient-button text-black px-6 py-2 rounded-lg font-semibold">
+                    <button id="connectWallet" class="bg-white text-green-600 px-6 py-2 rounded-lg font-semibold hover:bg-green-50 transition-colors">
                         <i class="fas fa-wallet mr-2"></i>Connect Wallet
                     </button>
                 </div>
@@ -145,29 +133,25 @@
 
     <!-- Adjust main content margin to account for new navbar -->
     <main class="container mx-auto px-4 py-32">
-        <!-- Info Saldo - Hanya satu section -->
+        <!-- Info Saldo - Tambahkan elemen yang diperlukan -->
         <div class="dark-card p-6 rounded-xl mb-8">
             <h2 class="text-xl font-semibold mb-4 text-white">Balance Information</h2>
             <div class="grid md:grid-cols-4 gap-4">
-                <div class="bg-[#1a1a1a] p-4 rounded-lg">
-                    <p class="text-sm text-[#B4B4B4]">PEPE Balance</p>
-                    <p id="pepeBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
+                <div class="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                    <p class="text-sm text-gray-400">Available PEPE</p>
+                    <p id="pepeBalance" class="text-xl font-bold text-white">0 PEPE</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg">
-                    <p class="text-sm text-[#B4B4B4]">Staked PEPE</p>
+                <div class="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                    <p class="text-sm text-gray-400">Staked PEPE</p>
                     <p id="stakedBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg">
-                    <p class="text-sm text-[#B4B4B4]">USDT Balance</p>
-                    <p id="usdtBalance" class="text-xl font-bold text-[#00FFA3]">0 USDT</p>
+                <div class="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                    <p class="text-sm text-gray-400">USDT Balance</p>
+                    <p id="usdtBalance" class="text-xl font-bold text-purple-400">0 USDT</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg">
-                    <p class="text-sm text-[#B4B4B4]">Pending Rewards</p>
-                    <p id="pendingRewards" class="text-xl font-bold text-[#00FFA3]">0 USDT</p>
-                </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg">
-                    <p class="text-sm text-[#B4B4B4]">Total PEPE Balance</p>
-                    <p id="totalBalance" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
+                <div class="p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                    <p class="text-sm text-gray-400">Total Balance</p>
+                    <p id="totalBalance" class="text-xl font-bold text-blue-400">0 PEPE</p>
                 </div>
             </div>
         </div>
@@ -175,139 +159,141 @@
         <!-- Lock Period & Active Stakes Section -->
         <div class="dark-card p-6 rounded-xl mb-8">
             <div class="grid grid-cols-2 gap-4">
-                <!-- Lock Period Status -->
-                <div class="p-4 bg-[#1a1a1a] rounded-lg">
-                    <h3 class="font-semibold mb-2 text-white">Current Lock Period</h3>
-                    <div class="flex items-baseline">
-                        <span id="stakingPeriod" class="text-2xl font-bold text-[#00FFA3]">Loading...</span>
-                    </div>
+                <div>
+                    <h2 class="text-lg font-semibold mb-3 text-white">Staking Period</h2>
+                    <p id="stakingPeriod" class="text-xl font-bold text-gray-500">Loading...</p>
                 </div>
-
-                <!-- Your Stakes -->
-                <div class="p-4 bg-[#1a1a1a] rounded-lg">
-                    <h3 class="font-semibold mb-2 text-white">Your Active Stakes</h3>
+                <div>
+                    <h2 class="text-lg font-semibold mb-3 text-white">Active Stakes</h2>
                     <div id="activeStakesInfo" class="space-y-2">
-                        <!-- Will be populated by JavaScript -->
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Pool Staking -->
+        <!-- Pool Staking - Updated to show pools before login -->
         <div class="mb-8">
             <h2 class="text-2xl font-bold mb-6 text-white">Staking Pools</h2>
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="poolsContainer">
-                <!-- Pool cards akan ditambahkan secara dinamis oleh JavaScript -->
-            </div>
-        </div>
+            <div id="poolsContainer" class="grid md:grid-cols-3 gap-6">
+                <!-- Static pool display before login -->
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const poolsContainer = document.getElementById('poolsContainer');
+                        if (poolsContainer && window.CONFIG && window.CONFIG.pepeStaking.pools) {
+                            const pools = window.CONFIG.pepeStaking.pools;
+                            let html = '';
+                            
+                            pools.forEach((pool, index) => {
+                                html += `
+                                <div class="pool-card rounded-xl p-6">
+                                    <div class="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 class="text-lg font-bold text-white">${pool.name}</h3>
+                                            <p class="text-[#B4B4B4] text-sm">Lock Period: 5 Minutes (Testing)</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-2xl font-bold text-[#00FFA3]">${pool.reward} USDT</p>
+                                            <p class="text-[#B4B4B4] text-sm">Fixed Reward</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="space-y-3 mb-4">
+                                        <div class="flex justify-between text-sm">
+                                            <span class="text-[#B4B4B4]">Required Stake:</span>
+                                            <span class="font-medium text-white">${pool.minPepe} PEPE</span>
+                                        </div>
+                                        <div class="flex justify-between text-sm">
+                                            <span class="text-[#B4B4B4]">Total Staked:</span>
+                                            <span class="font-medium text-white">0 PEPE</span>
+                                        </div>
+                                        <div class="flex justify-between text-sm">
+                                            <span class="text-[#B4B4B4]">Slots:</span>
+                                            <span class="font-medium text-white">0/--</span>
+                                        </div>
+                                    </div>
 
-        <!-- Tambahkan tombol emergency recovery di bawah Pool Management Section -->
-        <div class="dark-card p-6 rounded-xl mb-8 mt-6">
-            <h2 class="text-xl font-bold mb-4 text-red-500">Emergency Recovery</h2>
-            <p class="text-gray-400 mb-4">If you're experiencing high gas fees or issues with unstaking, use the emergency recovery option.</p>
-            <button id="emergency-recovery" class="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 transition-all duration-200">
-                <i class="fas fa-exclamation-triangle mr-2"></i>
-                Emergency Recovery
-            </button>
-        </div>
-
-        <!-- Info Section -->
-        <div class="dark-card p-6 rounded-xl shadow-lg">
-            <h2 class="text-xl font-semibold mb-4 text-white">Informasi Penting</h2>
-            <div class="space-y-4 text-[#B4B4B4]">
-                <div class="flex items-start">
-                    <i class="fas fa-info-circle text-blue-500 mt-1 mr-3"></i>
-                    <div>
-                        <p class="font-medium">Aturan Staking:</p>
-                        <ul class="list-disc list-inside ml-4 mt-2 space-y-2">
-                            <li>Periode staking tetap 30 hari untuk semua pool</li>
-                            <li>Setiap pool memiliki jumlah minimum dan maksimum stake yang sama</li>
-                            <li>Reward dalam USDT akan diberikan setelah periode 30 hari</li>
-                            <li>Tidak ada auto-compound, harus stake ulang setelah periode berakhir</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="flex items-start">
-                    <i class="fas fa-exclamation-triangle text-yellow-500 mt-1 mr-3"></i>
-                    <div>
-                        <p class="font-medium">Peringatan:</p>
-                        <ul class="list-disc list-inside ml-4 mt-2 space-y-2">
-                            <li>Unstake sebelum 30 hari akan menghanguskan reward</li>
-                            <li>Pastikan memilih pool sesuai dengan jumlah PEPE yang akan di-stake</li>
-                        </ul>
-                    </div>
-                </div>
+                                    <div class="space-y-2">
+                                        <button onclick="connectWalletPrompt()" class="w-full gradient-button text-black py-2 rounded-lg font-semibold">
+                                            Stake ${pool.minPepe} PEPE
+                                        </button>
+                                    </div>
+                                </div>
+                                `;
+                            });
+                            
+                            poolsContainer.innerHTML = html;
+                        }
+                    });
+                    
+                    function connectWalletPrompt() {
+                        alert('Please connect your wallet to stake PEPE tokens');
+                        document.getElementById('connectWallet').click();
+                    }
+                </script>
             </div>
         </div>
     </main>
 
     <!-- Modal Stake -->
     <div id="stakeModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="modal-content dark-card max-w-md w-full p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-white">Stake PEPE</h3>
-                <button onclick="closeStakeModal()" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
+        <div class="modal-content dark-card max-w-md w-full p-6 rounded-xl">
+            <h2 class="text-xl font-bold mb-4 text-white">Stake PEPE Tokens</h2>
             <div class="space-y-4">
-                <div class="bg-[#1a1a1a] p-4 rounded-lg border border-gray-800">
-                    <p class="text-sm text-[#B4B4B4] mb-2">Jumlah PEPE untuk Pool ini</p>
-                    <p id="minStake" class="text-xl font-bold text-[#00FFA3]">0 PEPE</p>
-                    <p class="text-xs text-gray-500 mt-1">*Jumlah stake tetap sesuai pool yang dipilih</p>
+                <div>
+                    <p class="text-sm text-gray-400 mb-1">Required Stake</p>
+                    <p id="minStake" class="text-xl font-bold text-white">1,000,000 PEPE</p>
                 </div>
-                <div class="bg-[#1a1a1a] p-4 rounded-lg border border-gray-800 space-y-2">
-                    <p class="text-sm font-medium text-white">Informasi Pool:</p>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-[#B4B4B4]">Lock Period:</span>
-                        <span id="poolLockPeriod" class="text-white">5 Minutes (Testing)</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-[#B4B4B4]">Reward:</span>
-                        <span id="poolReward" class="text-white">0 USDT</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-[#B4B4B4]">Slots:</span>
-                        <span id="poolSlots" class="text-white">0/0</span>
+                <div>
+                    <p class="text-sm text-gray-400 mb-1">Reward</p>
+                    <p id="poolReward" class="text-xl font-bold text-[#00FFA3]">7.5 USDT</p>
+                </div>
+                <div class="pt-4 border-t border-gray-700">
+                    <p class="text-sm text-gray-400 mb-4">Are you sure you want to stake?</p>
+                    <div class="flex space-x-3">
+                        <button onclick="confirmStake()" class="flex-1 gradient-button text-black py-2 rounded-lg font-semibold">
+                            Confirm
+                        </button>
+                        <button onclick="closeStakeModal()" class="flex-1 bg-gray-700 text-white py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors">
+                            Cancel
+                        </button>
                     </div>
                 </div>
-                <button onclick="confirmStake()" class="w-full gradient-button text-black py-3 rounded-lg font-semibold">
-                    Konfirmasi Stake
-                </button>
             </div>
         </div>
     </div>
 
     <!-- Modal Network -->
     <div id="networkModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="modal-content dark-card max-w-md w-full p-6">
+        <div class="modal-content dark-card max-w-md w-full p-6 rounded-xl">
             <div class="text-center mb-6">
                 <i class="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
-                <h3 class="text-2xl font-bold text-white">Network Salah</h3>
-                <p class="text-[#B4B4B4] mt-2">Mohon ganti ke BSC Testnet</p>
+                <h2 class="text-xl font-bold text-white">Network Error</h2>
             </div>
+            <p class="text-gray-300 mb-6 text-center">
+                Please switch to BSC Testnet to use this application
+            </p>
             <button onclick="switchToBSCTestnet()" class="w-full gradient-button text-black py-3 rounded-lg font-semibold">
-                Ganti Network
+                Switch to BSC Testnet
             </button>
         </div>
     </div>
 
     <!-- Modal MetaMask -->
     <div id="metamaskModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="modal-content dark-card max-w-md w-full p-6">
+        <div class="modal-content dark-card max-w-md w-full p-6 rounded-xl">
             <div class="text-center mb-6">
-                <i class="fas fa-wallet text-4xl text-yellow-500 mb-4"></i>
-                <h3 class="text-2xl font-bold text-white">MetaMask Diperlukan</h3>
-                <p class="text-[#B4B4B4] mt-2">Silakan install MetaMask untuk menggunakan dApp ini</p>
+                <i class="fas fa-fox-alt text-4xl text-orange-500 mb-4"></i>
+                <h2 class="text-xl font-bold text-white">MetaMask Required</h2>
             </div>
-            <div class="flex flex-col gap-3">
-                <a href="https://metamask.io" target="_blank" class="w-full gradient-button text-black py-3 rounded-lg font-semibold text-center">
-                    Install MetaMask
-                </a>
-                <button onclick="closeMetaMaskModal()" class="w-full border border-gray-300 py-3 rounded-lg font-semibold hover:bg-gray-50">
-                    Tutup
-                </button>
-            </div>
+            <p class="text-gray-300 mb-6 text-center">
+                Please install MetaMask browser extension to use this application
+            </p>
+            <a href="https://metamask.io" target="_blank" class="block w-full gradient-button text-center text-black py-3 rounded-lg font-semibold">
+                Get MetaMask
+            </a>
+            <button onclick="closeMetaMaskModal()" class="w-full mt-3 border border-gray-600 text-gray-300 py-2 rounded-lg">
+                Close
+            </button>
         </div>
     </div>
 

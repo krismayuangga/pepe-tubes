@@ -14,6 +14,9 @@
             background-color: #f3f4f6;
         }
     </style>
+    
+    <!-- PENTING: Load admin-config.js di head -->
+    <script src="admin-config.js"></script>
 </head>
 <body class="min-h-screen bg-gray-100">
     <!-- Navbar -->
@@ -27,12 +30,34 @@
                 </div>
             </div>
             <div class="flex items-center space-x-4">
+                <!-- Tombol utama tetap ada -->
                 <button id="connectWallet" class="bg-purple-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-600">
                     <i class="fas fa-wallet mr-2"></i>Connect Wallet
                 </button>
-                <button id="setupButton" class="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700">
-                    <i class="fas fa-cog mr-2"></i>Setup Reward Token
-                </button>
+                
+                <!-- Dropdown menu untuk tombol-tombol admin -->
+                <div class="relative">
+                    <button id="adminOptionsBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">
+                        <i class="fas fa-tools mr-2"></i>Admin Tools <i class="fas fa-caret-down ml-1"></i>
+                    </button>
+                    <div id="adminOptionsMenu" class="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg py-1 hidden z-50">
+                        <!-- Add Admin option in dropdown menu -->
+                        <button id="addAdminBtn" class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-800">
+                            <i class="fas fa-user-plus mr-2"></i>Add Admin
+                        </button>
+                        <!-- Gabungkan Setup Contract dan Setup Reward Token -->
+                        <button id="setupTokenBtn" class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-800">
+                            <i class="fas fa-cog mr-2"></i>Setup Contract
+                        </button>
+                        <button id="refreshLockBtn" class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-800">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh Lock Period
+                        </button>
+                        <hr class="my-1 border-gray-200">
+                        <button id="resetBtn" class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-red-600">
+                            <i class="fas fa-power-off mr-2"></i>Reset Connection
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -139,9 +164,22 @@
         <div class="bg-white rounded-xl shadow-md p-6 mb-8">
             <h2 class="text-lg font-bold mb-4">Lock Period Management</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Quick Lock Period -->
+                <!-- Global Quick Set -->
                 <div class="p-4 bg-gray-50 rounded-lg">
-                    <h3 class="font-semibold mb-2">Quick Set</h3>
+                    <h3 class="font-semibold mb-2">Global Settings</h3>
+                    
+                    <!-- Add current lock period display here -->
+                    <div class="mb-3 pb-3 border-b border-gray-200">
+                        <p class="text-sm text-gray-500">Current Default Lock Period:</p>
+                        <div class="flex items-baseline">
+                            <span id="currentLockPeriod" class="text-lg font-bold text-purple-600">0</span>
+                            <span class="ml-2 text-gray-500">days</span>
+                        </div>
+                        <div class="mt-1 text-xs text-gray-500">
+                            <span id="lockPeriodInSeconds" class="font-mono">0 seconds</span>
+                        </div>
+                    </div>
+                    
                     <select id="quickLockPeriod" class="w-full border rounded px-3 py-2 mb-2">
                         <option value="300">5 Minutes (Testing)</option>
                         <option value="3600">1 Hour</option>
@@ -149,34 +187,117 @@
                         <option value="604800">7 Days</option>
                         <option value="2592000">30 Days</option>
                     </select>
-                    <button onclick="setQuickLockPeriod()" 
-                            class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
-                        Set Lock Period
-                    </button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setQuickLockPeriod()" 
+                            class="bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                            Set Default
+                        </button>
+                        <button onclick="applyToAllPools()" 
+                            class="bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                            Apply to All
+                        </button>
+                    </div>
                 </div>
                 
-                <!-- Custom Lock Period -->
+                <!-- Per Pool Lock Period -->
                 <div class="p-4 bg-gray-50 rounded-lg">
-                    <h3 class="font-semibold mb-2">Custom Period</h3>
-                    <div class="flex space-x-2 mb-2">
-                        <input type="number" id="customLockPeriod" 
-                               class="flex-1 border rounded px-3 py-2" 
-                               placeholder="Enter days">
-                        <button onclick="setCustomLockPeriod()"
-                                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                            Set Custom
+                    <h3 class="font-semibold mb-2">Pool-Specific Setting</h3>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <div>
+                            <label class="text-xs text-gray-500">Pool</label>
+                            <select id="poolSelector" class="w-full border rounded px-3 py-2">
+                                <option value="0">Pool 1</option>
+                                <option value="1">Pool 2</option>
+                                <option value="2">Pool 3</option>
+                                <option value="3">Pool 4</option>
+                                <option value="4">Pool 5</option>
+                                <option value="5">Pool 6</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500">Duration</label>
+                            <input type="number" id="poolLockPeriodDays" class="w-full border rounded px-3 py-2" placeholder="Days">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="setPoolLockPeriod()" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                                Set
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Current Lock Periods Display -->
+            <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div class="mb-3 pb-3 border-b border-gray-200">
+                    <p class="text-sm text-gray-500">Default Lock Period:</p>
+                    <div class="flex items-baseline">
+                        <span id="defaultLockPeriod" class="text-lg font-bold text-purple-600">0</span>
+                        <span class="ml-2 text-gray-500">seconds</span>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-medium mb-2">Pool-Specific Lock Periods:</h4>
+                    <div class="grid grid-cols-3 gap-4" id="poolLockPeriodsDisplay">
+                        <!-- Will be filled via JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pool Management (NEW) -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+            <h2 class="text-lg font-bold mb-4">Pool Management</h2>
+            
+            <!-- Create New Pool -->
+            <div class="p-4 bg-gray-50 rounded-lg mb-4">
+                <h3 class="font-semibold mb-2">Create New Pool</h3>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs text-gray-500">Min PEPE</label>
+                        <input type="number" id="newPoolMinAmount" class="w-full border rounded px-3 py-2" placeholder="e.g. 1000000">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Max Holders</label>
+                        <input type="number" id="newPoolMaxHolders" class="w-full border rounded px-3 py-2" placeholder="e.g. 100">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Reward (USDT)</label>
+                        <input type="number" id="newPoolReward" class="w-full border rounded px-3 py-2" placeholder="e.g. 10">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Lock Period (days)</label>
+                        <input type="number" id="newPoolLockPeriod" class="w-full border rounded px-3 py-2" placeholder="e.g. 30">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="createNewPool()" class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                            Create
                         </button>
                     </div>
                 </div>
             </div>
-            <!-- Current Lock Period Display -->
-            <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                <p class="text-sm text-gray-500">Current Lock Period:</p>
-                <div class="flex items-baseline">
-                    <span id="currentLockPeriod" class="text-2xl font-bold text-purple-600">0</span>
-                    <span class="ml-2 text-gray-500">days</span>
+            
+            <!-- Update Pool Rewards -->
+            <div class="p-4 bg-gray-50 rounded-lg">
+                <h3 class="font-semibold mb-2">Update Pool Rewards</h3>
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs text-gray-500">Select Pool</label>
+                        <select id="updatePoolSelector" class="w-full border rounded px-3 py-2">
+                            <!-- Filled via JavaScript -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">New Reward (USDT)</label>
+                        <input type="number" id="updatePoolReward" class="w-full border rounded px-3 py-2" placeholder="e.g. 10">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="updatePoolReward()" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                            Update
+                        </button>
+                    </div>
                 </div>
-                <p id="lockPeriodInSeconds" class="text-sm text-gray-400 mt-1"></p>
             </div>
         </div>
     </main>
@@ -186,40 +307,203 @@
         <p id="notificationText"></p>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-    <script src="admin-config.js"></script>
+    <!-- Load admin-app.js sebelum script debugging -->
+    <script src="admin-app.js"></script>
+    
+    <!-- Script debugging dengan perbaikan yang ditingkatkan -->
     <script>
-    // Tambahkan script diagnostik untuk memeriksa jika tombol Connect Wallet berfungsi
     document.addEventListener('DOMContentLoaded', function() {
         console.log("DOM fully loaded and parsed");
         
+        // Tambahkan tombol reset (untuk debugging)
+        const navContainer = document.querySelector('nav .container');
+        if (navContainer) {
+            const resetButton = document.createElement('button');
+            resetButton.className = 'ml-4 bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700';
+            resetButton.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>Reset Connection';
+            resetButton.onclick = function() {
+                console.log("Resetting connection...");
+                localStorage.clear();
+                window.location.reload();
+            };
+            navContainer.appendChild(resetButton);
+        }
+        
         const connectWalletBtn = document.getElementById('connectWallet');
         if (connectWalletBtn) {
-            console.log("Connect wallet button found:", connectWalletBtn);
-            connectWalletBtn.addEventListener('click', function() {
+            console.log("Connect wallet button found");
+            
+            // Setup tombol connectWallet dengan perbaikan
+            connectWalletBtn.onclick = async function() {
                 console.log("Connect wallet button clicked");
-                // Cek apakah MetaMask terinstall
-                if (typeof window.ethereum !== 'undefined') {
-                    console.log("MetaMask terdeteksi");
-                    // Pastikan admin-app.js sudah dimuat dengan benar
-                    if (typeof connectWallet === 'function') {
-                        connectWallet();
+                
+                try {
+                    // Check MetaMask
+                    if (typeof window.ethereum !== 'undefined') {
+                        console.log("MetaMask terdeteksi");
+                        
+                        // Tambahkan delay untuk memberikan waktu UI memproses klik
+                        setTimeout(async () => {
+                            try {
+                                // Koneksi wallet dengan provider
+                                console.log("Requesting accounts...");
+                                await window.ethereum.request({
+                                    method: 'eth_requestAccounts'
+                                });
+                                
+                                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                                const signer = provider.getSigner();
+                                const address = await signer.getAddress();
+                                console.log("Wallet connected:", address);
+                                
+                                // Inisialisasi kontrak langsung di sini
+                                console.log("Initializing contracts...");
+                                const stakingContract = new ethers.Contract(
+                                    CONFIG.pepeStaking.address,
+                                    CONFIG.pepeStaking.abi,
+                                    signer
+                                );
+                                
+                                // Tampilkan alamat di tombol connect
+                                connectWalletBtn.innerHTML = `<i class="fas fa-wallet mr-2"></i>${address.slice(0, 6)}...${address.slice(-4)}`;
+                                connectWalletBtn.classList.remove('bg-purple-500', 'hover:bg-purple-600');
+                                connectWalletBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                                
+                                // Panggil juga fungsi connectWallet jika tersedia
+                                if (typeof window.connectWallet === 'function') {
+                                    await window.connectWallet();
+                                } else {
+                                    console.warn("Function connectWallet not available");
+                                }
+                                
+                                // Setup button untuk add USDT
+                                const addUsdtButton = document.getElementById('addUsdtButton');
+                                if (addUsdtButton) {
+                                    addUsdtButton.addEventListener('click', async () => {
+                                        try {
+                                            const amount = prompt("Masukkan jumlah USDT yang akan ditambahkan:");
+                                            if (!amount) return;
+                                            
+                                            const usdtAmount = ethers.utils.parseEther(amount);
+                                            const usdtContract = new ethers.Contract(
+                                                CONFIG.dummyUSDT.address,
+                                                CONFIG.dummyUSDT.abi,
+                                                signer
+                                            );
+                                            
+                                            // Approve first
+                                            const approveTx = await usdtContract.approve(stakingContract.address, usdtAmount);
+                                            await approveTx.wait();
+                                            
+                                            // Add USDT to contract
+                                            const tx = await stakingContract.addUSDT(usdtAmount);
+                                            await tx.wait();
+                                            
+                                            alert('Berhasil menambahkan USDT ke kontrak!');
+                                            location.reload();
+                                        } catch (error) {
+                                            console.error('Error adding USDT:', error);
+                                            alert('Error: ' + error.message);
+                                        }
+                                    });
+                                }
+                                
+                                // Setup button untuk setup reward token
+                                const setupButton = document.getElementById('setupButton');
+                                if (setupButton) {
+                                    setupButton.addEventListener('click', async () => {
+                                        try {
+                                            const tx = await stakingContract.setRewardToken(CONFIG.dummyUSDT.address);
+                                            await tx.wait();
+                                            alert('Berhasil mengatur USDT sebagai reward token!');
+                                            location.reload();
+                                        } catch (error) {
+                                            console.error('Error setting reward token:', error);
+                                            alert('Error: ' + error.message);
+                                        }
+                                    });
+                                }
+                                
+                            } catch (error) {
+                                console.error("Error connecting wallet:", error);
+                                alert("Error connecting wallet: " + error.message);
+                            }
+                        }, 100);
+                        
                     } else {
-                        console.error("Function connectWallet not found! admin-app.js might not be loaded correctly");
-                        alert("Error: admin-app.js tidak dimuat dengan benar. Mohon periksa console.");
+                        console.error("MetaMask tidak terdeteksi!");
+                        alert("MetaMask tidak terdeteksi! Silakan install MetaMask terlebih dahulu.");
                     }
-                } else {
-                    console.error("MetaMask tidak terdeteksi!");
-                    alert("MetaMask tidak terdeteksi! Silakan install MetaMask terlebih dahulu.");
+                } catch (err) {
+                    console.error("Connection error:", err);
+                    alert("Connection error: " + err.message);
                 }
-            });
+            };
+            
+            // Auto connect if previously connected
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                console.log("Wallet already connected, trying auto-connect");
+                connectWalletBtn.click();
+            }
+            
         } else {
             console.error("Connect wallet button not found!");
         }
+
+        // Pastikan placeholder elemen dibuat (HANYA UNTUK ELEMEN YANG BENAR-BENAR TIDAK ADA DI HTML)
+        ['poolLockPeriodsDisplay'].forEach(id => {
+            if (!document.getElementById(id)) {
+                console.warn(`Creating placeholder for missing element: #${id}`);
+                const placeholder = document.createElement('span');
+                placeholder.id = id;
+                placeholder.style.display = 'none';
+                document.body.appendChild(placeholder);
+            }
+        });
     });
     </script>
-    <script src="admin-app.js"></script>
-
+    
+    <!-- Tambahkan JavaScript untuk dropdown di bagian bawah file sebelum </body> -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const adminOptionsBtn = document.getElementById('adminOptionsBtn');
+            const adminOptionsMenu = document.getElementById('adminOptionsMenu');
+            
+            // Toggle dropdown menu
+            adminOptionsBtn.addEventListener('click', function() {
+                adminOptionsMenu.classList.toggle('hidden');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!adminOptionsBtn.contains(event.target) && !adminOptionsMenu.contains(event.target)) {
+                    adminOptionsMenu.classList.add('hidden');
+                }
+            });
+            
+            // Setup function assignments
+            document.getElementById('addAdminBtn').addEventListener('click', function() {
+                addNewAdmin();
+                adminOptionsMenu.classList.add('hidden');
+            });
+            
+            document.getElementById('setupTokenBtn').addEventListener('click', function() {
+                setupInitialConfig();
+                adminOptionsMenu.classList.add('hidden');
+            });
+            
+            document.getElementById('refreshLockBtn').addEventListener('click', function() {
+                updateStakingPeriodDisplay();
+                adminOptionsMenu.classList.add('hidden');
+            });
+            
+            document.getElementById('resetBtn').addEventListener('click', function() {
+                console.log("Resetting connection...");
+                localStorage.clear();
+                window.location.reload();
+                adminOptionsMenu.classList.add('hidden');
+            });
+        });
+    </script>
 </body>
 </html>
