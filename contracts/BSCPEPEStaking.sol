@@ -22,6 +22,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
     Pool[] public pools;
 
     uint256 public DEFAULT_LOCK_PERIOD = 30 days; // Default lock period
+    uint256 public constant MAX_POOLS = 10; // Maximum number of pools allowed
 
     struct Pool {
         uint256 minStakeAmount;
@@ -46,10 +47,10 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
     event RewardTokenSet(address indexed token);
     event LockPeriodUpdated(uint256 newPeriod);
     event PoolLockPeriodUpdated(uint256 indexed poolId, uint256 newPeriod);
-    event TokensRecovered(address token, uint256 amount);
     event UnstakedEarly(address indexed user, uint256 indexed poolId, uint256 amount);
     event PoolCreated(uint256 indexed poolId, uint256 minAmount, uint256 reward);
     event PoolUpdated(uint256 indexed poolId, uint256 reward);
+    event PoolStatusUpdated(uint256 indexed poolId, bool isActive); // New event for pool status updates
 
     modifier onlyAdmin() {
         require(isAdmin[msg.sender] || owner() == msg.sender, "Not admin");
@@ -85,7 +86,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit LockPeriodUpdated(newPeriod);
     }
 
-    // NEW: Set lock period for a specific pool
+    // Set lock period for a specific pool
     function setPoolLockPeriod(uint256 poolId, uint256 newPeriod) external onlyAdmin {
         require(poolId < pools.length, "Invalid pool");
         require(newPeriod > 0, "Lock period must be > 0");
@@ -96,7 +97,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit PoolLockPeriodUpdated(poolId, newPeriod);
     }
 
-    // NEW: Apply lock period to all pools
+    // Apply lock period to all pools
     function applyLockPeriodToAllPools(uint256 newPeriod) external onlyAdmin {
         require(newPeriod > 0, "Lock period must be > 0");
         
@@ -110,7 +111,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit LockPeriodUpdated(newPeriod);
     }
 
-    // NEW: Create a new pool
+    // Create a new pool
     function createPool(
         uint256 minAmount, 
         uint256 maxHolders, 
@@ -118,6 +119,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         uint256 lockPeriod, 
         bool isActive
     ) external onlyAdmin {
+        require(pools.length < MAX_POOLS, "Maximum number of pools reached"); // Check max pools
         require(minAmount > 0, "Min amount must be > 0");
         require(maxHolders > 0, "Max holders must be > 0");
         require(reward > 0, "Reward must be > 0");
@@ -138,7 +140,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit PoolCreated(poolId, minAmount, reward);
     }
 
-    // NEW: Update pool rewards
+    // Update pool rewards
     function updatePoolReward(uint256 poolId, uint256 newReward) external onlyAdmin {
         require(poolId < pools.length, "Invalid pool");
         require(newReward > 0, "Reward must be > 0");
@@ -149,12 +151,13 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit PoolUpdated(poolId, newReward);
     }
 
-    // NEW: Update pool status (active/inactive)
+    // Update pool status (active/inactive)
     function setPoolStatus(uint256 poolId, bool isActive) external onlyAdmin {
         require(poolId < pools.length, "Invalid pool");
         
         Pool storage pool = pools[poolId];
         pool.isActive = isActive;
+        emit PoolStatusUpdated(poolId, isActive); // Emit event when pool status changes
     }
 
     function stake(uint256 poolId, uint256 amount) external nonReentrant {
@@ -179,7 +182,6 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         emit Staked(msg.sender, poolId, amount);
     }
 
-    // UPDATED: Check pool-specific lock period
     function unstake(uint256 stakeIndex) external nonReentrant {
         require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
         Stake storage userStake = userStakes[msg.sender][stakeIndex];
@@ -218,7 +220,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
         Stake storage userStake = userStakes[msg.sender][stakeIndex];
         
-        // Check stake status, hanya memeriksa apakah sudah unstake sebelumnya
+        // Check stake status
         require(!userStake.hasClaimedReward, "Already unstaked");
         
         // Cache values before modifying storage
@@ -255,21 +257,37 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         return pools;
     }
 
-    function recoverTokens(address token, uint256 amount) external onlyOwner {
-        require(amount > 0, "Amount must be > 0");
-        require(IERC20(token).balanceOf(address(this)) >= amount, "Insufficient balance");
-        
-        bool success = IERC20(token).transfer(msg.sender, amount);
-        require(success, "Token transfer failed");
-        
-        emit TokensRecovered(token, amount);
-    }
-
     function addUSDT(uint256 amount) external onlyAdmin {
         require(address(rewardToken) != address(0), "Reward token not set");
         require(amount > 0, "Amount must be > 0");
         
         bool success = rewardToken.transferFrom(msg.sender, address(this), amount);
         require(success, "Transfer failed");
+    }
+
+    // Helper functions untuk mengoptimalkan akses ke stakes (sesuai saran audit)
+    function getUserActiveStakeCount(address user) external view returns (uint256) {
+        uint256 count = 0;
+        Stake[] memory stakes = userStakes[user];
+        
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (!stakes[i].hasClaimedReward) {
+                count++;
+            }
+        }
+        
+        return count;
+    }
+
+    function getUserActiveStake(address user, uint256 poolId) external view returns (bool, uint256, uint256) {
+        Stake[] memory stakes = userStakes[user];
+        
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (stakes[i].poolId == poolId && !stakes[i].hasClaimedReward) {
+                return (true, stakes[i].amount, stakes[i].startTime);
+            }
+        }
+        
+        return (false, 0, 0);
     }
 }
