@@ -18,7 +18,16 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
     IERC20 public pepeToken;
     IERC20 public rewardToken;
     mapping(address => bool) public isAdmin;
-    mapping(address => Stake[]) public userStakes;
+    
+    // Optimized data structure: Changed from mapping(address => Stake[]) to nested mapping
+    mapping(address => mapping(uint256 => Stake)) public userStakes;
+    
+    // Track stake count per user
+    mapping(address => uint256) public userStakeCount;
+    
+    // Track active stakes for each user
+    mapping(address => uint256) public userActiveStakeCount;
+    
     Pool[] public pools;
 
     uint256 public DEFAULT_LOCK_PERIOD = 30 days; // Default lock period
@@ -39,18 +48,19 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         uint256 startTime;
         uint256 poolId;
         bool hasClaimedReward;
+        bool exists; // Flag to check if stake exists at given index
     }
 
-    event Staked(address indexed user, uint256 indexed poolId, uint256 amount);
-    event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 reward);
+    event Staked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 stakeIndex);
+    event Unstaked(address indexed user, uint256 indexed poolId, uint256 amount, uint256 reward, uint256 stakeIndex);
     event AdminSet(address indexed admin, bool status);
     event RewardTokenSet(address indexed token);
     event LockPeriodUpdated(uint256 newPeriod);
     event PoolLockPeriodUpdated(uint256 indexed poolId, uint256 newPeriod);
-    event UnstakedEarly(address indexed user, uint256 indexed poolId, uint256 amount);
+    event UnstakedEarly(address indexed user, uint256 indexed poolId, uint256 amount, uint256 stakeIndex);
     event PoolCreated(uint256 indexed poolId, uint256 minAmount, uint256 reward);
     event PoolUpdated(uint256 indexed poolId, uint256 reward);
-    event PoolStatusUpdated(uint256 indexed poolId, bool isActive); // New event for pool status updates
+    event PoolStatusUpdated(uint256 indexed poolId, bool isActive);
 
     modifier onlyAdmin() {
         require(isAdmin[msg.sender] || owner() == msg.sender, "Not admin");
@@ -168,25 +178,35 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         require(pool.currentHolders < pool.maxHolders, "Pool is full");
 
         pepeToken.transferFrom(msg.sender, address(this), amount);
-
-        userStakes[msg.sender].push(Stake({
+        
+        // Get the next available stake index
+        uint256 stakeIndex = userStakeCount[msg.sender];
+        
+        // Store stake in the mapping
+        userStakes[msg.sender][stakeIndex] = Stake({
             amount: amount,
             startTime: block.timestamp,
             poolId: poolId,
-            hasClaimedReward: false
-        }));
+            hasClaimedReward: false,
+            exists: true
+        });
+        
+        // Increment stake counters
+        userStakeCount[msg.sender] = stakeIndex + 1;
+        userActiveStakeCount[msg.sender] += 1;
 
         pool.totalStaked += amount;
         pool.currentHolders += 1;
 
-        emit Staked(msg.sender, poolId, amount);
+        emit Staked(msg.sender, poolId, amount, stakeIndex);
     }
 
     function unstake(uint256 stakeIndex) external nonReentrant {
-        require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
+        require(stakeIndex < userStakeCount[msg.sender], "Invalid stake index");
         Stake storage userStake = userStakes[msg.sender][stakeIndex];
         
         // Check stake status 
+        require(userStake.exists, "Stake does not exist");
         require(!userStake.hasClaimedReward, "Already unstaked");
         
         // Get pool-specific lock period
@@ -199,6 +219,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         
         // Update stake record first to prevent reentrancy
         userStake.hasClaimedReward = true;
+        userActiveStakeCount[msg.sender] -= 1;
         
         // Update pool data
         Pool storage pool = pools[poolId];
@@ -213,14 +234,15 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         bool rewardSuccess = rewardToken.transfer(msg.sender, reward);
         require(rewardSuccess, "Reward transfer failed");
 
-        emit Unstaked(msg.sender, poolId, amount, reward);
+        emit Unstaked(msg.sender, poolId, amount, reward, stakeIndex);
     }
 
     function unstakeEarly(uint256 stakeIndex) external nonReentrant {
-        require(stakeIndex < userStakes[msg.sender].length, "Invalid stake index");
+        require(stakeIndex < userStakeCount[msg.sender], "Invalid stake index");
         Stake storage userStake = userStakes[msg.sender][stakeIndex];
         
         // Check stake status
+        require(userStake.exists, "Stake does not exist");
         require(!userStake.hasClaimedReward, "Already unstaked");
         
         // Cache values before modifying storage
@@ -229,6 +251,7 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         
         // Update stake record first to prevent reentrancy
         userStake.hasClaimedReward = true;
+        userActiveStakeCount[msg.sender] -= 1;
         
         // Update pool data
         Pool storage pool = pools[poolId];
@@ -241,11 +264,52 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         
         // Reward tidak diberikan untuk unstake sebelum waktunya
         
-        emit UnstakedEarly(msg.sender, poolId, amount);
+        emit UnstakedEarly(msg.sender, poolId, amount, stakeIndex);
     }
 
+    // Updated to return active stakes efficiently
     function getUserStakes(address user) external view returns (Stake[] memory) {
-        return userStakes[user];
+        uint256 totalStakes = userStakeCount[user];
+        uint256 activeCount = userActiveStakeCount[user];
+        
+        if (totalStakes == 0 || activeCount == 0) {
+            return new Stake[](0);
+        }
+        
+        Stake[] memory stakes = new Stake[](activeCount);
+        uint256 currentIndex = 0;
+        
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (userStakes[user][i].exists && !userStakes[user][i].hasClaimedReward) {
+                stakes[currentIndex] = userStakes[user][i];
+                currentIndex++;
+                
+                if (currentIndex == activeCount) {
+                    break;
+                }
+            }
+        }
+        
+        return stakes;
+    }
+
+    // Get all stakes (including claimed ones) - may be useful for history
+    function getAllUserStakes(address user) external view returns (Stake[] memory) {
+        uint256 totalStakes = userStakeCount[user];
+        
+        if (totalStakes == 0) {
+            return new Stake[](0);
+        }
+        
+        Stake[] memory stakes = new Stake[](totalStakes);
+        
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (userStakes[user][i].exists) {
+                stakes[i] = userStakes[user][i];
+            }
+        }
+        
+        return stakes;
     }
 
     function getPoolDetails(uint256 poolId) external view returns (Pool memory) {
@@ -265,26 +329,65 @@ contract BSCPEPEStaking is Ownable, ReentrancyGuard {
         require(success, "Transfer failed");
     }
 
-    // Helper functions untuk mengoptimalkan akses ke stakes (sesuai saran audit)
-    function getUserActiveStakeCount(address user) external view returns (uint256) {
-        uint256 count = 0;
-        Stake[] memory stakes = userStakes[user];
+    // Helper function to get specific stake
+    function getUserStakeAtIndex(address user, uint256 stakeIndex) external view returns (Stake memory) {
+        require(stakeIndex < userStakeCount[user], "Invalid stake index");
+        require(userStakes[user][stakeIndex].exists, "Stake does not exist");
+        return userStakes[user][stakeIndex];
+    }
+
+    // Helper function to get all active stakes for a pool
+    function getUserActiveStakesInPool(address user, uint256 poolId) external view returns (Stake[] memory) {
+        uint256 totalStakes = userStakeCount[user];
+        uint256 activeCountInPool = 0;
         
-        for (uint256 i = 0; i < stakes.length; i++) {
-            if (!stakes[i].hasClaimedReward) {
-                count++;
+        // First pass: count active stakes in this pool
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (userStakes[user][i].exists && 
+                !userStakes[user][i].hasClaimedReward && 
+                userStakes[user][i].poolId == poolId) {
+                activeCountInPool++;
             }
         }
         
-        return count;
+        if (activeCountInPool == 0) {
+            return new Stake[](0);
+        }
+        
+        // Second pass: collect stakes
+        Stake[] memory poolStakes = new Stake[](activeCountInPool);
+        uint256 currentIndex = 0;
+        
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (userStakes[user][i].exists && 
+                !userStakes[user][i].hasClaimedReward && 
+                userStakes[user][i].poolId == poolId) {
+                poolStakes[currentIndex] = userStakes[user][i];
+                currentIndex++;
+                
+                if (currentIndex == activeCountInPool) {
+                    break;
+                }
+            }
+        }
+        
+        return poolStakes;
     }
 
+    // Get active stake count for a user
+    function getUserActiveStakeCount(address user) external view returns (uint256) {
+        return userActiveStakeCount[user];
+    }
+
+    // Get the user's active stake in a specific pool (first found)
     function getUserActiveStake(address user, uint256 poolId) external view returns (bool, uint256, uint256) {
-        Stake[] memory stakes = userStakes[user];
+        uint256 totalStakes = userStakeCount[user];
         
-        for (uint256 i = 0; i < stakes.length; i++) {
-            if (stakes[i].poolId == poolId && !stakes[i].hasClaimedReward) {
-                return (true, stakes[i].amount, stakes[i].startTime);
+        for (uint256 i = 0; i < totalStakes; i++) {
+            if (userStakes[user][i].exists && 
+                !userStakes[user][i].hasClaimedReward && 
+                userStakes[user][i].poolId == poolId) {
+                return (true, userStakes[user][i].amount, userStakes[user][i].startTime);
             }
         }
         
