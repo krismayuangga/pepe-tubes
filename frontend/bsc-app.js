@@ -107,7 +107,7 @@ function generateActiveStakeInfo(stake, lockPeriod) {
     const now = Math.floor(Date.now() / 1000);
     const endTime = Number(stake.startTime) + Number(lockPeriod);
     const timeLeft = endTime - now;
-    const status = timeLeft <= 0 ? 'ðŸŸ¢ READY' : 'ðŸŸ¡ LOCKED';
+    const status = timeLeft <= 0 ? '🟢 READY' : '🟡 LOCKED';
     const statusColor = timeLeft <= 0 ? 'text-[#00FFA3]' : 'text-yellow-500';
 
     return `
@@ -634,8 +634,8 @@ async function updateActiveStakesInfo() {
         const now = Math.floor(Date.now() / 1000);
         const endTime = Number(stake.startTime) + Number(lockPeriod);
         const timeLeft = endTime - now;
-        const status = timeLeft <= 0 ? 'ðŸŸ¢ READY' : 'ðŸŸ¡ LOCKED';
-        const statusColor = timeLeft <= 0 ? 'text-[#00FFA3]' : 'text-yellow-500';
+        const isReady = timeLeft <= 0;
+        const statusColor = isReady ? 'text-[#00FFA3]' : 'text-yellow-500';
 
         return `
             <div class="border-b border-gray-700 last:border-0 pb-2">
@@ -645,7 +645,10 @@ async function updateActiveStakesInfo() {
                 </div>
                 <div class="flex justify-between text-sm">
                     <span class="text-[#B4B4B4]">Status:</span>
-                    <span class="${statusColor}">${status}</span>
+                    <span class="${statusColor} flex items-center">
+                        <span class="inline-block w-3 h-3 rounded-full mr-1 ${isReady ? 'bg-green-500' : 'bg-yellow-500'}"></span>
+                        ${isReady ? 'READY' : 'LOCKED'}
+                    </span>
                 </div>
                 ${timeLeft <= 0 ? `
                 <div class="flex justify-end mt-2">

@@ -1,136 +1,159 @@
-// Network switcher functionality for PEPE Staking dApp
-let currentNetwork = 'testnet'; // Default to testnet initially
-
-// Store network configuration objects
-const networks = {
-    mainnet: {
-        configUrl: 'mainnet-config.js',
-        name: 'BSC Mainnet',
-        chainId: '0x38',
-        cssClass: 'mainnet',
-        label: 'MAINNET'
-    },
-    testnet: {
-        configUrl: 'bsc-config.js',
-        name: 'BSC Testnet',
-        chainId: '0x61',
-        cssClass: 'testnet',
-        label: 'TESTNET'
+// Network Switcher Logic
+class NetworkSwitcher {
+    constructor() {
+        this.currentNetwork = 'testnet'; // Default ke testnet
+        this.initialized = false;
+        
+        // Network configurations
+        this.networks = {
+            testnet: {
+                config: BSC_CONFIG,
+                contracts: CONFIG
+            },
+            mainnet: {
+                config: MAINNET_CONFIG,
+                contracts: MAINNET_CONTRACTS
+            }
+        };
+        
+        // Initialize network dari localStorage jika tersedia
+        this.initFromStorage();
     }
-};
-
-// Function to switch networks
-async function switchNetwork(networkName) {
-    if (!networks[networkName]) return false;
     
-    try {
-        // Update UI
-        const networkLabel = document.getElementById('networkLabel');
-        if (networkLabel) {
-            networkLabel.textContent = networks[networkName].label;
-            networkLabel.className = `text-xs font-bold ml-2 network-badge ${networks[networkName].cssClass}`;
+    initFromStorage() {
+        const savedNetwork = localStorage.getItem('pepe_network');
+        if (savedNetwork && this.networks[savedNetwork]) {
+            this.currentNetwork = savedNetwork;
+            console.log(`Loaded network from storage: ${this.currentNetwork}`);
+        }
+    }
+    
+    // Get active network configuration
+    getCurrentNetwork() {
+        return this.currentNetwork;
+    }
+    
+    // Get network config object
+    getNetworkConfig() {
+        return this.networks[this.currentNetwork].config;
+    }
+    
+    // Get contracts config object
+    getContractsConfig() {
+        return this.networks[this.currentNetwork].contracts;
+    }
+    
+    // Switch between networks
+    async switchNetwork(networkName) {
+        if (!this.networks[networkName]) {
+            console.error(`Network ${networkName} not found`);
+            return false;
         }
         
-        // Store current network selection
-        localStorage.setItem('pepeStakingNetwork', networkName);
-        currentNetwork = networkName;
+        // Store in localStorage
+        localStorage.setItem('pepe_network', networkName);
+        this.currentNetwork = networkName;
         
-        // Add/remove network-specific classes from body
-        document.body.classList.remove('network-testnet', 'network-mainnet');
-        document.body.classList.add(`network-${networkName}`);
-        
-        // Update network name display
-        const networkName_el = document.getElementById('networkName');
-        if (networkName_el) {
-            networkName_el.textContent = networks[networkName].name;
+        // Reset contract states and connections
+        if (window.provider) {
+            try {
+                // Attempt to switch network in MetaMask
+                const targetConfig = this.getNetworkConfig();
+                await this.switchChainInMetaMask(targetConfig);
+            } catch (error) {
+                console.error("Error switching chain in MetaMask:", error);
+            }
         }
         
-        // Reload configuration
-        await loadNetworkConfig(networkName);
-        
-        // Reinitialize contracts with new config
-        if (typeof window.initializeContracts === 'function') {
-            await window.initializeContracts();
-        } else if (typeof window.connectWallet === 'function' && window.ethereum && window.ethereum.selectedAddress) {
-            // Re-connect wallet to refresh with new network config
-            await window.connectWallet();
-        }
-        
+        // Refresh page to reinitialize everything with new network
+        window.location.reload();
         return true;
-    } catch (error) {
-        console.error('Network switch error:', error);
-        return false;
     }
-}
-
-// Load network configuration dynamically
-async function loadNetworkConfig(networkName) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = networks[networkName].configUrl + '?v=' + new Date().getTime(); // Cache busting
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Failed to load network config'));
-        document.head.appendChild(script);
-    });
-}
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', async () => {
-    // Load network preference from localStorage
-    const savedNetwork = localStorage.getItem('pepeStakingNetwork') || 'testnet';
     
-    // Initialize network switcher UI
-    const networkSwitch = document.getElementById('networkSwitch');
-    if (networkSwitch) {
-        // Set initial state based on saved preference
-        networkSwitch.checked = savedNetwork === 'mainnet';
-        
-        // Add event listener
-        networkSwitch.addEventListener('change', async () => {
-            const newNetwork = networkSwitch.checked ? 'mainnet' : 'testnet';
-            await switchNetwork(newNetwork);
+    // Helper to switch chain in MetaMask
+    async switchChainInMetaMask(networkConfig) {
+        try {
+            if (!window.ethereum) return false;
             
-            // Also switch the actual blockchain network in wallet if connected
-            if (window.ethereum && window.ethereum.selectedAddress) {
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: networkConfig.chainId }],
+            });
+            return true;
+        } catch (switchError) {
+            // Error code indicates that chain belum ditambahkan ke MetaMask
+            if (switchError.code === 4902) {
                 try {
                     await window.ethereum.request({
-                        method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: networks[newNetwork].chainId }]
+                        method: 'wallet_addEthereumChain',
+                        params: [
+                            {
+                                chainId: networkConfig.chainId,
+                                chainName: networkConfig.chainName,
+                                nativeCurrency: networkConfig.nativeCurrency,
+                                rpcUrls: networkConfig.rpcUrls,
+                                blockExplorerUrls: networkConfig.blockExplorerUrls
+                            }
+                        ],
                     });
-                } catch (error) {
-                    console.error('Failed to switch chain in wallet:', error);
-                    // Try to add the chain if it doesn't exist
-                    if (error.code === 4902) {
-                        try {
-                            await window.ethereum.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [{
-                                    chainId: networks[newNetwork].chainId,
-                                    chainName: networks[newNetwork].name,
-                                    rpcUrls: [newNetwork === 'mainnet' ? 
-                                        'https://bsc-dataseed.binance.org/' : 
-                                        'https://data-seed-prebsc-1-s1.binance.org:8545/'
-                                    ],
-                                    nativeCurrency: {
-                                        name: 'BNB',
-                                        symbol: 'BNB',
-                                        decimals: 18
-                                    },
-                                    blockExplorerUrls: [newNetwork === 'mainnet' ? 
-                                        'https://bscscan.com' : 
-                                        'https://testnet.bscscan.com'
-                                    ]
-                                }]
-                            });
-                        } catch (addError) {
-                            console.error('Error adding chain:', addError);
-                        }
-                    }
+                    return true;
+                } catch (addError) {
+                    console.error("Error adding network to MetaMask:", addError);
+                    return false;
                 }
             }
-        });
+            console.error("Error switching network:", switchError);
+            return false;
+        }
     }
     
-    // Initialize with saved network
-    await switchNetwork(savedNetwork);
+    // Update UI elements to reflect current network
+    updateNetworkUI() {
+        const networkBadge = document.getElementById('network-badge');
+        const networkSelector = document.getElementById('network-selector');
+        
+        if (networkBadge) {
+            // Update badge color and text
+            if (this.currentNetwork === 'mainnet') {
+                networkBadge.textContent = 'MAINNET';
+                networkBadge.className = 'px-2 py-1 bg-green-600 text-white text-xs rounded-full';
+            } else {
+                networkBadge.textContent = 'TESTNET';
+                networkBadge.className = 'px-2 py-1 bg-yellow-500 text-white text-xs rounded-full';
+            }
+        }
+        
+        if (networkSelector) {
+            networkSelector.value = this.currentNetwork;
+        }
+    }
+}
+
+// Initialize network switcher
+const networkSwitcher = new NetworkSwitcher();
+
+// Handle network switch from UI
+function handleNetworkSwitch(event) {
+    const newNetwork = event.target.value;
+    console.log(`Switching to ${newNetwork}...`);
+    
+    // Show confirmation dialog
+    if (confirm(`Are you sure you want to switch to ${newNetwork.toUpperCase()}? This will reload the page.`)) {
+        networkSwitcher.switchNetwork(newNetwork);
+    } else {
+        // Reset selector to current network
+        event.target.value = networkSwitcher.getCurrentNetwork();
+    }
+}
+
+// Document ready handler
+document.addEventListener('DOMContentLoaded', function() {
+    // Update UI when DOM is ready
+    networkSwitcher.updateNetworkUI();
+    
+    // Add event listener to network selector if it exists
+    const networkSelector = document.getElementById('network-selector');
+    if (networkSelector) {
+        networkSelector.addEventListener('change', handleNetworkSwitch);
+    }
 });
